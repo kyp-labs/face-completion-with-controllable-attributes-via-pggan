@@ -132,14 +132,13 @@ class G_EncLastBlock(nn.Module):
     """Generator encoder's last block class."""
 
     def __init__(self, in_channels, out_channels, num_channels,
-                 num_attrs, nonlinearity, instancenorm=True):
+                 nonlinearity, instancenorm=True):
         """constructor.
 
         Args:
             in_channels (int): The number of input channels.
             out_channels (int): The number of output channels.
             num_channels (int): The number of input image channels.
-            num_attrs (int): The number of attributes.
             nonlinearity: nonlinearity function
             instancenorm (bool): Whether use instance normalization or not,
                                  Default is True.
@@ -208,6 +207,8 @@ class AttrConcatBlock(nn.Module):
         if attr is not None:
             assert len(attr.shape) == 2, \
                     f"len of attr should be 2 not {len(attr.shape)}"
+            print(x.shape)
+            print(attr.shape)
             attr = attr.unsqueeze(-1).unsqueeze(-1)
             x = torch.cat([x, attr], dim=1)
         x = self.conv1(x)
@@ -365,11 +366,11 @@ class Generator(nn.Module):
 
     def __init__(self,
                  dataset_shape,
-                 fmap_base=2048,
+                 fmap_base=1024,
                  fmap_min=4,
-                 fmap_max=512,
-                 latent_size=512,
-                 num_attrs=4,
+                 fmap_max=256,
+                 latent_size=256,
+                 num_attrs=1,
                  use_mask=True,
                  use_attrs=True,
                  leaky_relu=True,
@@ -422,8 +423,7 @@ class Generator(nn.Module):
                                nonlinearity, instancenorm=instancenorm)
                                for i in reversed(range(1, R-1))])
         self.encblock0 = G_EncLastBlock(latent_size, latent_size,
-                                        adjusted_channels, self.num_attrs,
-                                        nonlinearity)
+                                        adjusted_channels, nonlinearity)
         self.encblocks.append(self.encblock0)
         self.encblocks = nn.ModuleList(self.encblocks)
 
@@ -457,8 +457,9 @@ class Generator(nn.Module):
 
         """
         if self.use_attrs:
-            assert attr.shape[1] == self.num_attrs, \
-                   f'attr dimension be {self.num_attrs} not {attr.shape[1]}'
+            if self.num_attrs > 1:
+                assert attr.shape[1] == self.num_attrs, \
+                      f'attr dimension be {self.num_attrs} not {attr.shape[1]}'
         else:
             assert attr is None, "attr should not be input"
 
@@ -618,11 +619,11 @@ class Discriminator(nn.Module):
 
     def __init__(self,
                  dataset_shape,
-                 fmap_base=2048,
+                 fmap_base=1024,
                  fmap_min=4,
-                 fmap_max=512,
-                 latent_size=512,
-                 num_attrs=4,
+                 fmap_max=256,
+                 latent_size=256,
+                 num_attrs=1,
                  use_attrs=True,
                  leaky_relu=True,
                  instancenorm=True):

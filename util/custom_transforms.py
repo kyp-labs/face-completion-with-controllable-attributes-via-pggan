@@ -41,7 +41,7 @@ class ScaleNRotate(object):
         sc = (self.scales[1] - self.scales[0]) * random.random() - \
              (self.scales[1] - self.scales[0]) / 2 + 1
 
-        for elem in ['image', 'mask', 'masked_image']:
+        for elem in ['image']:
             image = sample[elem]
 
             h, w = image.shape[:2]
@@ -121,9 +121,13 @@ class ToTensor(object):
             sample (dict): {str: array} formatted data for training.
 
         """
-        for elem in ['image', 'masked_image', 'mask', 'attr']:
+        for elem in ['image', 'attr']:
             if elem == 'attr':
                 tmp = sample[elem]
+
+                if tmp.ndim == 2:
+                    tmp = tmp.squeeze()
+
                 sample[elem] = torch.from_numpy(tmp).float()
 
                 return sample
