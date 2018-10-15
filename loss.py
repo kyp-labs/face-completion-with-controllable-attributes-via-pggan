@@ -31,7 +31,6 @@ from util.util import Gan
 from util.util import GeneratorLoss
 from util.util import DiscriminatorLoss
 from util.util import Vgg16Layers
-import config
 
 
 class FaceGenLoss():
@@ -39,6 +38,7 @@ class FaceGenLoss():
 
     Attributes:
         pytorch_loss_use : flag for use of PyTorch loss function
+        config : configuration object
         use_cuda : flag for cuda use
         gpu : # of gpus
         alpha_adver_loss_syn : weight of syn images' loss of D
@@ -57,37 +57,38 @@ class FaceGenLoss():
 
     """
 
-    def __init__(self, use_cuda=False, gpu=-1):
+    def __init__(self, config, use_cuda=False, gpu=-1):
         """Class initializer.
 
         Steps:
-            1. Read loss params from config.py
+            1. Read loss params from self.config.py
             2. Create loss functions
             3. Create VGG16 model and feature extractor
 
         """
+        self.config = config
         self.pytorch_loss_use = True
 
         self.use_cuda = use_cuda
         self.gpu = gpu
 
-        self.alpha_adver_loss_syn = config.loss.alpha_adver_loss_syn
-        self.alpha_recon = config.loss.alpha_recon
+        self.alpha_adver_loss_syn = self.config.loss.alpha_adver_loss_syn
+        self.alpha_recon = self.config.loss.alpha_recon
 
-        self.lambda_GP = config.loss.lambda_GP
-        self.lambda_recon = config.loss.lambda_recon
-        self.lambda_feat = config.loss.lambda_feat
-        self.lambda_bdy = config.loss.lambda_bdy
-        self.lambda_attr = config.loss.lambda_attr
+        self.lambda_GP = self.config.loss.lambda_GP
+        self.lambda_recon = self.config.loss.lambda_recon
+        self.lambda_feat = self.config.loss.lambda_feat
+        self.lambda_bdy = self.config.loss.lambda_bdy
+        self.lambda_attr = self.config.loss.lambda_attr
 
         self.g_losses = GeneratorLoss()
         self.d_losses = DiscriminatorLoss()
 
-        self.gan = config.loss.gan
+        self.gan = self.config.loss.gan
         self.create_loss_functions(self.gan)
 
         # for computing feature loss
-        if config.loss.use_feat_loss:
+        if self.config.loss.use_feat_loss:
             # Vgg16 ImageNet Pretrained Model
             self.vgg16 = Vgg16FeatureExtractor()
 
@@ -96,7 +97,7 @@ class FaceGenLoss():
     def register_on_gpu(self):
         """Set vgg16 to cuda according to gpu availability."""
         if self.use_cuda:
-            if config.loss.use_feat_loss:
+            if self.config.loss.use_feat_loss:
                 self.vgg16.cuda()
 
     def create_loss_functions(self, gan):
@@ -174,7 +175,7 @@ class FaceGenLoss():
         interpolates = util.tofloat(self.use_cuda, interpolates)
         interpolates = autograd.Variable(interpolates, requires_grad=True)
 
-        if config.train.use_attr:
+        if self.config.train.use_attr:
             # need cur_level
             cls_interpolates, attr_interpolates = D(interpolates, cur_level)
         else:
@@ -204,7 +205,7 @@ class FaceGenLoss():
             d_attr_obs : classes for attributes of observed images
 
         """
-        if config.train.use_attr is False:
+        if self.config.train.use_attr is False:
             return 0
 
         # cross entropy loss
@@ -227,7 +228,7 @@ class FaceGenLoss():
             syn : synthesized images
 
         """
-        if config.loss.use_feat_loss is False:
+        if self.config.loss.use_feat_loss is False:
             return 0
 
         # get activation of relu2_2
@@ -238,7 +239,6 @@ class FaceGenLoss():
         real_fmap = self.vgg16(real.detach(), Vgg16Layers.relu2_2)
         syn_fmap = self.vgg16(syn.detach(), Vgg16Layers.relu2_2)
 
-        # print(real_fmap)
         feat_loss = real_fmap - syn_fmap
         feat_loss = ((feat_loss.norm(2, dim=1) - 1.0) ** 2).mean()
         return feat_loss
@@ -279,7 +279,7 @@ class FaceGenLoss():
         if H < 16:
             return 0
 
-        mean_filter = MeanFilter(mask.shape, config.loss.mean_filter_size)
+        mean_filter = MeanFilter(mask.shape, self.config.loss.mean_filter_size)
         if self.use_cuda:
             mean_filter.cuda()
 
@@ -307,7 +307,8 @@ class FaceGenLoss():
                     cls_real,
                     cls_syn,
                     d_attr_real,
-                    d_attr_obs):
+                    d_attr_obs,
+                    use_mask):
         """Calculate Generator loss.
 
         Args:
@@ -321,6 +322,7 @@ class FaceGenLoss():
             cls_syn : classes for synthesized images
             d_attr_real : classes for attributes of real images
             d_attr_obs : classes for attributes of observed images
+            use_mask : flag for mask use in the model
 
         """
         # cls_real = cls_real[:1, :]  # temporary code
@@ -328,12 +330,17 @@ class FaceGenLoss():
 
         # adversarial loss
         self.g_losses.g_adver_loss = self.calc_adver_loss(cls_syn, True, 1)
-        # reconstruction loss
-        self.g_losses.recon_loss = self.calc_recon_loss(real, syn, mask)
         # feature loss
         self.g_losses.feat_loss = self.calc_feat_loss(real, syn)
-        # boundary loss
-        self.g_losses.bdy_loss = self.calc_bdy_loss(real, syn, mask)
+
+        if use_mask:
+            # reconstruction loss
+            self.g_losses.recon_loss = self.calc_recon_loss(real, syn, mask)
+            # boundary loss
+            self.g_losses.bdy_loss = self.calc_bdy_loss(real, syn, mask)
+        else:
+            self.g_losses.recon_loss = 0
+            self.g_losses.bdy_loss = 0
 
         self.g_losses.g_loss = self.g_losses.g_adver_loss + \
             self.lambda_recon*self.g_losses.recon_loss + \
@@ -501,7 +508,7 @@ class MeanFilter(nn.Module):
                                 padding=filter_size//2)
 
         init_weight = 1.0 / (filter_size*filter_size)
-        nn.init.constant(self.filter.weight, init_weight)
+        nn.init.constant_(self.filter.weight, init_weight)
 
     def forward(self, x):
         """Forward.

@@ -123,8 +123,7 @@ class PGConv2d(nn.Module):
             x = self.nonlinearity(x)
         if self.instancenorm:
             x = nn.InstanceNorm2d(self.out_channels)(x)
-        else:
-            x = nn.BatchNorm2d(self.out_channels)(x)
+
         return x
 
 
@@ -207,8 +206,6 @@ class AttrConcatBlock(nn.Module):
         if attr is not None:
             assert len(attr.shape) == 2, \
                     f"len of attr should be 2 not {len(attr.shape)}"
-            print(x.shape)
-            print(attr.shape)
             attr = attr.unsqueeze(-1).unsqueeze(-1)
             x = torch.cat([x, attr], dim=1)
         x = self.conv1(x)
