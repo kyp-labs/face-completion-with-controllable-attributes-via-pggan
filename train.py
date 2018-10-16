@@ -10,11 +10,12 @@ Example:
     Run this module without options (:
         $ python train.py
 
-Note that all configrations for FaceGen are in config.py.
+Note that all configrations for FaceGen are in self.config.py.
 
 """
 
 import os
+import sys
 import torch
 import torch.optim as optim
 
@@ -29,11 +30,10 @@ from util.util import Phase
 from util.util import Mode
 from util.replay import ReplayMemory
 from util.snapshot import Snapshot
-from util.util import GeneratorLossHistory
-from util.util import DiscriminatorLossHistory
 
 import config
 from loss import FaceGenLoss
+import datetime
 
 
 class FaceGen():
@@ -54,8 +54,6 @@ class FaceGen():
         optim_G : optimizer for generator
         optim_D : optimizer for discriminator
         loss : losses of generator and discriminator
-        g_loss_hist : loss history for generator (for plotting)
-        d_loss_hist : loss history for discriminator (for plotting)
         replay_memory : replay memory
         global_it : global # of iterations through training
         global_cur_nimg : global # of current images through training
@@ -73,10 +71,10 @@ class FaceGen():
 
     """
 
-    def __init__(self):
+    def __init__(self, config):
         """Class initializer.
 
-        1. Read configurations from config.py
+        1. Read configurations from self.config.py
         2. Check gpu availability
         3. Create a model and training related objects
         - Model (Generator, Discriminator)
@@ -86,46 +84,47 @@ class FaceGen():
         - Snapshot
 
         """
-        self.D_repeats = config.train.D_repeats
-        self.total_size = int(config.train.total_size *
-                              config.train.dataset_unit)
-        self.train_size = int(config.train.train_size *
-                              config.train.dataset_unit)
-        self.transition_size = int(config.train.transition_size *
-                                   config.train.dataset_unit)
+        self.config = config
+        self.D_repeats = self.config.train.D_repeats
+        self.total_size = int(self.config.train.total_size *
+                              self.config.train.dataset_unit)
+        self.train_size = int(self.config.train.train_size *
+                              self.config.train.dataset_unit)
+        self.transition_size = int(self.config.train.transition_size *
+                                   self.config.train.dataset_unit)
         assert (self.total_size == (self.train_size + self.transition_size)) \
             and self.train_size > 0 and self.transition_size > 0
 
         # GPU
         self.check_gpu()
 
-        self.mode = config.train.mode
-        self.use_mask = config.train.use_mask
-        self.use_attr = config.train.use_attr
+        self.mode = self.config.train.mode
+        self.use_mask = self.config.train.use_mask
+        self.use_attr = self.config.train.use_attr
 
         # Data Shape
-        dataset_shape = [1, config.dataset.num_channels,
-                         config.train.net.max_resolution,
-                         config.train.net.max_resolution]
+        dataset_shape = [1, self.config.dataset.num_channels,
+                         self.config.train.net.max_resolution,
+                         self.config.train.net.max_resolution]
 
         # Generator & Discriminator Creation
         self.G = Generator(dataset_shape,
-                           fmap_base=config.train.net.fmap_base,
-                           fmap_min=config.train.net.min_resolution,
-                           fmap_max=config.train.net.max_resolution,
-                           latent_size=config.train.net.latent_size,
-                           num_attrs=config.dataset.attibute_size,
-                           use_attrs=self.use_attr,
+                           fmap_base=self.config.train.net.fmap_base,
+                           fmap_min=self.config.train.net.min_resolution,
+                           fmap_max=self.config.train.net.max_resolution,
+                           latent_size=self.config.train.net.latent_size,
+                           num_attrs=self.config.dataset.attibute_size,
                            use_mask=self.use_mask,
+                           use_attrs=self.use_attr,
                            leaky_relu=True,
                            instancenorm=True)
 
         self.D = Discriminator(dataset_shape,
-                               fmap_base=config.train.net.fmap_base,
-                               fmap_min=config.train.net.min_resolution,
-                               fmap_max=config.train.net.max_resolution,
-                               latent_size=config.train.net.latent_size,
-                               num_attrs=config.dataset.attibute_size,
+                               fmap_base=self.config.train.net.fmap_base,
+                               fmap_min=self.config.train.net.min_resolution,
+                               fmap_max=self.config.train.net.max_resolution,
+                               latent_size=self.config.train.net.latent_size,
+                               num_attrs=self.config.dataset.attibute_size,
                                use_attrs=self.use_attr,
                                leaky_relu=True,
                                instancenorm=True)
@@ -134,19 +133,19 @@ class FaceGen():
         self.create_optimizer()
 
         # Loss
-        self.loss = FaceGenLoss(self.use_cuda, config.env.num_gpus)
-
-        self.g_loss_hist = GeneratorLossHistory()
-        self.d_loss_hist = DiscriminatorLossHistory()
+        self.loss = FaceGenLoss(self.config,
+                                self.use_cuda,
+                                self.config.env.num_gpus)
 
         # Replay Memory
-        self.replay_memory = ReplayMemory(self.use_cuda, config.replay.enabled)
-
+        self.replay_memory = ReplayMemory(self.config,
+                                          self.use_cuda,
+                                          self.config.replay.enabled)
         self.global_it = 1
         self.global_cur_nimg = 1
 
         # restore
-        self.snapshot = Snapshot(self.use_cuda)
+        self.snapshot = Snapshot(self.config, self.use_cuda)
         self.snapshot.prepare_logging()
         self.snapshot.restore_model(self.G, self.D, self.optim_G, self.optim_D)
 
@@ -162,10 +161,10 @@ class FaceGen():
                 do train one step
 
         """
-        min_resol = int(np.log2(config.train.net.min_resolution))
-        max_resol = int(np.log2(config.train.net.max_resolution))
-        assert 2**max_resol == config.train.net.max_resolution  \
-            and 2**min_resol == config.train.net.min_resolution \
+        min_resol = int(np.log2(self.config.train.net.min_resolution))
+        max_resol = int(np.log2(self.config.train.net.max_resolution))
+        assert 2**max_resol == self.config.train.net.max_resolution  \
+            and 2**min_resol == self.config.train.net.min_resolution \
             and max_resol >= min_resol >= 2
 
         from_resol = min_resol
@@ -180,11 +179,11 @@ class FaceGen():
 
             # Resolution & batch size
             cur_resol = 2 ** R
-            if config.train.forced_stop \
-               and cur_resol > config.train.forced_stop_resolution:
+            if self.config.train.forced_stop \
+               and cur_resol > self.config.train.forced_stop_resolution:
                 break
 
-            batch_size = config.sched.batch_dict[cur_resol]
+            batch_size = self.config.sched.batch_dict[cur_resol]
             assert batch_size >= 1
 
             train_iter = self.train_size//batch_size
@@ -224,15 +223,15 @@ class FaceGen():
 
             # load traninig set
             self.training_set = self.load_train_set(cur_resol, batch_size)
-            if config.replay.enabled:
+            if self.config.replay.enabled:
                 self.replay_memory.reset(cur_resol)
 
             # Learningn Rate
-            lrate = config.optimizer.lrate
+            lrate = self.config.optimizer.lrate
             self.G_lrate = lrate.G_dict.get(cur_resol,
-                                            config.optimizer.lrate.G_base)
+                                            self.config.optimizer.lrate.G_base)
             self.D_lrate = lrate.D_dict.get(cur_resol,
-                                            config.optimizer.lrate.D_base)
+                                            self.config.optimizer.lrate.D_base)
 
             # Training Set
             replay_mode = False
@@ -260,9 +259,10 @@ class FaceGen():
 
                     # get a next batch - temporary code
                     self.real = sample_batched['image']
-                    # It will be deleted
-                    self.attr_real = self.generate_attr_real_temp()
+                    self.attr_real = sample_batched['attr']
                     self.mask = sample_batched['mask']
+                    N, H, W = self.mask.shape
+                    self.mask = self.mask.reshape((N, 1, H, W))
 
                     if self.mode == Mode.inpainting:
                         self.obs = sample_batched['masked_image']
@@ -283,12 +283,12 @@ class FaceGen():
                     self.global_cur_nimg += 1
 
             # Replay Mode
-            if config.replay.enabled:
+            if self.config.replay.enabled:
                 replay_mode = True
                 phase = Phase.replaying
-                total_it = config.replay.replay_count
+                total_it = self.config.replay.replay_count
 
-                for i_batch in range(config.replay.replay_count):
+                for i_batch in range(self.config.replay.replay_count):
                     cur_it = i_batch+1
                     self.real, self.attr_real, self.mask,
                     self.obs, self.attr_obs, self.syn \
@@ -345,7 +345,7 @@ class FaceGen():
             self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
             self.backward_D(cur_level)
 
-            if config.replay.enabled and replay_mode is False:
+            if self.config.replay.enabled and replay_mode is False:
                 self.replay_memory.append(cur_resol,
                                           self.real,
                                           self.attr_real,
@@ -378,9 +378,7 @@ class FaceGen():
                                self.optim_G,
                                self.optim_D,
                                self.loss.g_losses,
-                               self.loss.d_losses,
-                               self.g_loss_hist,
-                               self.d_loss_hist)
+                               self.loss.d_losses)
         cur_nimg += batch_size
 
         return cur_nimg
@@ -446,12 +444,10 @@ class FaceGen():
                               self.cls_real,
                               self.cls_syn,
                               self.d_attr_real,
-                              self.d_attr_obs)
+                              self.d_attr_obs,
+                              self.use_mask)
         self.loss.g_losses.g_loss.backward()
         self.optim_G.step()
-
-        if config.snapshot.draw_plot:
-            self.g_loss_hist.append(self.loss.g_losses)
 
     def backward_D(self, cur_level, retain_graph=True):
         """Backward discriminator.
@@ -477,9 +473,6 @@ class FaceGen():
         self.loss.d_losses.d_loss.backward(retain_graph=retain_graph)
         self.optim_D.step()
 
-        if config.snapshot.draw_plot:
-            self.d_loss_hist.append(self.loss.d_losses)
-
     def preprocess(self):
         """Set input type to cuda or cpu according to gpu availability."""
         self.real = util.tofloat(self.use_cuda, self.real)
@@ -490,9 +483,10 @@ class FaceGen():
 
     def check_gpu(self):
         """Check gpu availability."""
-        self.use_cuda = torch.cuda.is_available() and config.env.num_gpus > 0
+        self.use_cuda = torch.cuda.is_available() \
+            and self.config.env.num_gpus > 0
         if self.use_cuda:
-            gpus = str(list(range(config.env.num_gpus)))
+            gpus = str(list(range(self.config.env.num_gpus)))
             os.environ['CUDA_VISIBLE_DEVICES'] = gpus
 
     def register_on_gpu(self):
@@ -512,23 +506,19 @@ class FaceGen():
         transform_options = transforms.Compose([dt.Normalize(0.5, 0.5),
                                                 dt.CenterSquareMask(),
                                                 dt.ToTensor()])
-        dataset_func = config.dataset.func
-        datasets = util.call_func_by_name(data_dir=config.dataset.data_dir,
+
+        dataset_func = self.config.dataset.func
+        ds = self.config.dataset
+        datasets = util.call_func_by_name(data_dir=ds.data_dir,
                                           resolution=resol,
+                                          landmark_info_path=ds.landmark_path,
+                                          identity_info_path=ds.identity_path,
+                                          filtered_list=ds.filtering_path,
                                           transform=transform_options,
                                           func=dataset_func)
+
         # train_dataset & data loader
-        return DataLoader(datasets, batch_size)
-
-    def generate_attr_real_temp(self):
-        """Generate attributes of real images."""
-        # attribute example:[“Male”,“Smiling”] -> [0,0], [1,0], [0,1], [1,1]
-        N, C, H, W = self.real.shape
-        attr_real = torch.rand(N, config.dataset.attibute_size)
-        attr_real[attr_real < 0.5] = 0
-        attr_real[attr_real >= 0.5] = 1
-
-        return attr_real
+        return DataLoader(datasets, batch_size, True)
 
     def generate_attr_obs(self, attr_real):
         """Generate attributes of observed images.
@@ -556,13 +546,13 @@ class FaceGen():
     def create_optimizer(self):
         """Create optimizers of generator and discriminator."""
         self.optim_G = optim.Adam(self.G.parameters(),
-                                  lr=config.optimizer.lrate.G_base,
-                                  betas=(config.optimizer.G_opt.beta1,
-                                         config.optimizer.G_opt.beta2))
+                                  lr=self.config.optimizer.lrate.G_base,
+                                  betas=(self.config.optimizer.G_opt.beta1,
+                                         self.config.optimizer.G_opt.beta2))
         self.optim_D = optim.Adam(self.D.parameters(),
-                                  lr=config.optimizer.lrate.D_base,
-                                  betas=(config.optimizer.D_opt.beta1,
-                                  config.optimizer.D_opt.beta2))
+                                  lr=self.config.optimizer.lrate.D_base,
+                                  betas=(self.config.optimizer.D_opt.beta1,
+                                  self.config.optimizer.D_opt.beta2))
 
     def rampup(self, cur_it, rampup_it):
         """Ramp up learning rate.
@@ -605,8 +595,8 @@ class FaceGen():
         if replay_mode:
             return
 
-        rampup_it = total_it * config.optimizer.lrate.rampup_rate
-        rampdown_it = total_it * config.optimizer.lrate.rampdown_rate
+        rampup_it = total_it * self.config.optimizer.lrate.rampup_rate
+        rampdown_it = total_it * self.config.optimizer.lrate.rampdown_rate
 
         # learning rate rampup & down
         for param_group in self.optim_G.param_groups:
@@ -626,13 +616,26 @@ class FaceGen():
 
 
 if __name__ == "__main__":
-    # misc.init_output_logging()
-    np.random.seed(config.common.random_seed)
+    begin_time = datetime.datetime.now()
 
-    # print('Running %s()...' % config.train['func'])
+    env = sys.argv[1] if len(sys.argv) > 2 else 'dev'
+
+    if env == 'dev':
+        cfg = config.DevelopmentConfig()
+    elif env == 'test':
+        cfg = config.TestCconfig()
+    elif env == 'prod':
+        cfg = config.ProductionConfig()
+    else:
+        raise ValueError('Invalid environment name')
+
     print('Running FaceGen()...')
-    # tfutil.call_func_by_name(**config.train)
-    facegen = FaceGen()
+    np.random.seed(cfg.common.random_seed)
+    facegen = FaceGen(cfg)
     facegen.train()
 
-    print('Exiting...')
+    end_time = datetime.datetime.now()
+
+    print()
+    print("Exiting...", end_time)
+    print("Running Time", end_time - begin_time)
