@@ -360,7 +360,7 @@ class FaceGen():
             # Training generator
             self.optim_G.zero_grad()
             self.forward_G(cur_level)
-            self.backward_G()
+            self.backward_G(cur_level)
             d_cnt = 0
 
         # model intermediate results
@@ -433,9 +433,11 @@ class FaceGen():
             self.d_attr_real = 0
             self.d_attr_obs = 0
 
-    def backward_G(self):
+    def backward_G(self, cur_level):
         """Backward generator."""
-        self.loss.calc_G_loss(self.real,
+        self.loss.calc_G_loss(self.G,
+                              cur_level,
+                              self.real,
                               self.obs,
                               self.attr_real,
                               self.attr_obs,

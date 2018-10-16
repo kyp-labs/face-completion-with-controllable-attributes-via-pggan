@@ -21,7 +21,7 @@ This module includes following loss related classes.
 """
 
 import torch
-
+import torch.nn.functional as F
 from torchvision.models import vgg16
 from torch import autograd
 from torch import nn
@@ -80,6 +80,7 @@ class FaceGenLoss():
         self.lambda_feat = self.config.loss.lambda_feat
         self.lambda_bdy = self.config.loss.lambda_bdy
         self.lambda_attr = self.config.loss.lambda_attr
+        self.lambda_cycle = self.config.loss.lambda_cycle
 
         self.g_losses = GeneratorLoss()
         self.d_losses = DiscriminatorLoss()
@@ -111,29 +112,20 @@ class FaceGenLoss():
 
         """
         # adversarial loss function
-        if gan == Gan.wgan_gp:
-            self.adver_loss_func = lambda p, t, w: (-2.0*t+1.0) * torch.mean(p)
+        if gan == Gan.sngan:
+            self.adver_loss_func = lambda p, t: (-2.0*t+1.0) * torch.mean(p)
+        elif gan == Gan.wgan_gp:
+            self.adver_loss_func = lambda p, t: (-2.0*t+1.0) * torch.mean(p)
         elif gan == Gan.lsgan:
-            self.adver_loss_func = lambda p, t, w: torch.mean((p-t)**2)
+            self.adver_loss_func = lambda p, t: torch.mean((p-t)**2)
         elif gan == Gan.gan:  # 1e-8 torch.nn.BCELoss()
-            if self.pytorch_loss_use:
-                self.adver_loss_func = torch.nn.BCELoss()
-            else:
-                self.adver_loss_func = \
-                    lambda p, t, w: -w*(torch.mean(t*torch.log(p+1e-8)) +
-                                        torch.mean((1-t)*torch.log(1-p+1e-8)))
+            self.adver_loss_func = torch.nn.BCELoss()
         else:
             raise ValueError('Invalid/Unsupported GAN: %s.' % gan)
 
-        # attribute loss function
-        if self.pytorch_loss_use:
-            self.attr_loss_func = torch.nn.BCELoss()
-        else:
-            self.attr_loss_func = \
-                lambda p, t: -(torch.mean(t*torch.log(p+1e-8)) +
-                               torch.mean((1-t)*torch.log(1-p+1e-8)))
+        self.attr_loss_func = torch.nn.BCELoss()
 
-    def calc_adver_loss(self, prediction, target, w=1.0):
+    def calc_adver_loss(self, prediction, target):
         """Calculate adversarial loss.
 
         Args:
@@ -143,14 +135,14 @@ class FaceGenLoss():
 
         """
         if self.gan == Gan.gan and self.pytorch_loss_use:
-            mini_batch = prediction.shape[0]
+            N = prediction.shape[0]
             if target is True:
-                target = util.tofloat(self.use_cuda, torch.ones(mini_batch))
+                target = util.tofloat(self.use_cuda, torch.ones(N))
             else:
-                target = util.tofloat(self.use_cuda, torch.zeros(mini_batch))
+                target = util.tofloat(self.use_cuda, torch.zeros(N))
             return self.adver_loss_func(prediction, target)
         else:
-            return self.adver_loss_func(prediction, target, w)
+            return self.adver_loss_func(prediction, target)
 
     def calc_gradient_penalty(self, D, cur_level, real, syn):
         """Calc gradient penalty of wgan gp.
@@ -175,17 +167,12 @@ class FaceGenLoss():
         interpolates = util.tofloat(self.use_cuda, interpolates)
         interpolates = autograd.Variable(interpolates, requires_grad=True)
 
-        if self.config.train.use_attr:
-            # need cur_level
-            cls_interpolates, attr_interpolates = D(interpolates, cur_level)
-        else:
-            # need cur_level
-            cls_interpolates = D(interpolates, cur_level)
+        cls_interpol, pixel_cls_interpol = D(interpolates, cur_level)
 
-        cls_interpolates = cls_interpolates[:1, :]  # temporary code
+        cls_interpol = cls_interpol[:1, :]  # temporary code
         grad_outputs = util.tofloat(self.use_cuda,
-                                    torch.ones(cls_interpolates.size()))
-        gradients = autograd.grad(outputs=cls_interpolates,
+                                    torch.ones(cls_interpol.size()))
+        gradients = autograd.grad(outputs=cls_interpol,
                                   inputs=interpolates,
                                   grad_outputs=grad_outputs,
                                   create_graph=True,
@@ -210,12 +197,8 @@ class FaceGenLoss():
 
         # cross entropy loss
         # N = attr_real.shape[0]
-        if self.pytorch_loss_use:
-            attr_loss_real = self.attr_loss_func(d_attr_real, attr_real)
-            attr_loss_obs = self.attr_loss_func(d_attr_obs, attr_obs)
-        else:
-            attr_loss_real = self.attr_loss_func(d_attr_real, attr_real)
-            attr_loss_obs = self.attr_loss_func(d_attr_obs, attr_obs)
+        attr_loss_real = self.attr_loss_func(d_attr_real, attr_real)
+        attr_loss_obs = self.attr_loss_func(d_attr_obs, attr_obs)
 
         attr_loss = attr_loss_real + attr_loss_obs
         return attr_loss
@@ -297,7 +280,30 @@ class FaceGenLoss():
 
         return bdy_loss
 
+    def calc_cycle_loss(self, G, cur_level, real, syn, attr_obs):
+        """Calculate cycle consistency loss.
+
+        Args:
+            G: generator
+            cur_level: progress indicator of progressive growing network
+            real (tensor) : real images
+            real_mask (tensor) : domain masks of real images
+            obs_mask (tensor) : domain masks of observed images
+
+        """
+        N, C, H, W = real.shape
+
+        pred_real = G(syn,
+                      attr=attr_obs,
+                      cur_level=cur_level)
+
+        # L1 norm
+        cycle_loss = F.l1_loss(pred_real, real, size_average=True)
+        return cycle_loss
+
     def calc_G_loss(self,
+                    G,
+                    cur_level,
                     real,
                     obs,
                     attr_real,
@@ -329,7 +335,7 @@ class FaceGenLoss():
         # cls_syn = cls_syn[:1, :] # temporary code
 
         # adversarial loss
-        self.g_losses.g_adver_loss = self.calc_adver_loss(cls_syn, True, 1)
+        self.g_losses.g_adver_loss = self.calc_adver_loss(cls_syn, True)
         # feature loss
         self.g_losses.feat_loss = self.calc_feat_loss(real, syn)
 
@@ -338,14 +344,23 @@ class FaceGenLoss():
             self.g_losses.recon_loss = self.calc_recon_loss(real, syn, mask)
             # boundary loss
             self.g_losses.bdy_loss = self.calc_bdy_loss(real, syn, mask)
+            # cycle consistency loss
+            self.g_losses.cycle_loss = 0
         else:
             self.g_losses.recon_loss = 0
             self.g_losses.bdy_loss = 0
+            # cycle consistency loss
+            self.g_losses.cycle_loss = self.calc_cycle_loss(G,
+                                                            cur_level,
+                                                            real,
+                                                            syn,
+                                                            attr_obs)
 
         self.g_losses.g_loss = self.g_losses.g_adver_loss + \
             self.lambda_recon*self.g_losses.recon_loss + \
             self.lambda_feat*self.g_losses.feat_loss + \
-            self.lambda_bdy*self.g_losses.bdy_loss
+            self.lambda_bdy*self.g_losses.bdy_loss + \
+            self.lambda_cycle*self.g_losses.cycle_loss
         return self.g_losses
 
     def calc_D_loss(self,
@@ -379,9 +394,9 @@ class FaceGenLoss():
         """
         # adversarial loss
         self.d_losses.d_adver_loss_real = \
-            self.calc_adver_loss(cls_real, True, 1.0)
+            self.calc_adver_loss(cls_real, True)
         self.d_losses.d_adver_loss_syn = \
-            self.calc_adver_loss(cls_syn, False, 1.0)
+            self.calc_adver_loss(cls_syn, False)
         self.d_losses.d_adver_loss = self.d_losses.d_adver_loss_real + \
             self.alpha_adver_loss_syn * self.d_losses.d_adver_loss_syn
 

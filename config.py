@@ -126,6 +126,8 @@ class Config():
         self.loss.lambda_bdy = 5000.0
         # weight of attribute loss (paper = 2)
         self.loss.lambda_attr = 2.0
+        # weight of cycle consistency loss
+        self.loss.lambda_cycle = 500.0
 
         # mean filter size for calculation of boudnary loss
         self.loss.mean_filter_size = 7
