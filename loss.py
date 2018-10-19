@@ -111,16 +111,18 @@ class FaceGenLoss():
 
         """
         # adversarial loss function
-        if gan == Gan.wgan_gp:
-            self.adver_loss_func = lambda p, t, w: (-2.0*t+1.0) * torch.mean(p)
+        if gan == Gan.sngan:
+            self.adver_loss_func = lambda p, t: (-2.0*t+1.0) * torch.mean(p)
+        elif gan == Gan.wgan_gp:
+            self.adver_loss_func = lambda p, t: (-2.0*t+1.0) * torch.mean(p)
         elif gan == Gan.lsgan:
-            self.adver_loss_func = lambda p, t, w: torch.mean((p-t)**2)
+            self.adver_loss_func = lambda p, t: torch.mean((p-t)**2)
         elif gan == Gan.gan:  # 1e-8 torch.nn.BCELoss()
             if self.pytorch_loss_use:
                 self.adver_loss_func = torch.nn.BCELoss()
             else:
                 self.adver_loss_func = \
-                    lambda p, t, w: -w*(torch.mean(t*torch.log(p+1e-8)) +
+                    lambda p, t: -(torch.mean(t*torch.log(p+1e-8)) +
                                         torch.mean((1-t)*torch.log(1-p+1e-8)))
         else:
             raise ValueError('Invalid/Unsupported GAN: %s.' % gan)
@@ -150,7 +152,7 @@ class FaceGenLoss():
                 target = util.tofloat(self.use_cuda, torch.zeros(mini_batch))
             return self.adver_loss_func(prediction, target)
         else:
-            return self.adver_loss_func(prediction, target, w)
+            return self.adver_loss_func(prediction, target)
 
     def calc_gradient_penalty(self, D, cur_level, real, syn):
         """Calc gradient penalty of wgan gp.

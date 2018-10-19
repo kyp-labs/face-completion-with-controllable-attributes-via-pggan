@@ -230,6 +230,16 @@ class TestConfig(Config):
                                  128: 4,
                                  256: 2}  # Resolution-specific overrides
 
+        self.snapshot.sample_freq_dict = {4: 256,
+                                          8: 512,
+                                          16: 1024,
+                                          32: 1024,
+                                          64: 2048,
+                                          128: 2048,
+                                          256: 2048}
+        
+        self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
+
 
 class ProductionConfig(Config):
     """Production Configuration Class."""

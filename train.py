@@ -505,7 +505,7 @@ class FaceGen():
             batch_size: flag for detaching syn image from generator graph
 
         """
-        transform_options = transforms.Compose([dt.Normalize,
+        transform_options = transforms.Compose([dt.Normalize(),
                                                 dt.CenterSquareMask(),
                                                 dt.ToTensor()])
 

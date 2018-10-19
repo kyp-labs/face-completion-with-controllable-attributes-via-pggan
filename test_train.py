@@ -50,14 +50,14 @@ class MyConfig(Config):
 
 if __name__ == "__main__":
     begin_time = dt.datetime.now()
-    env = sys.argv[1] if len(sys.argv) > 2 else 'myconfig'
+    env = sys.argv[1] if len(sys.argv) > 2 else 'test'
 
     if env == 'dev':
         print('With development config,')
         cfg = config.DevelopmentConfig()
     elif env == 'test':
         print('With test config,')
-        cfg = config.TestCconfig()
+        cfg = config.TestConfig()
     elif env == 'prod':
         print('With production config,')
         cfg = config.ProductionConfig()
