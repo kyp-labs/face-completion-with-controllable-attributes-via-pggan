@@ -109,8 +109,8 @@ class Config():
         self.loss = EasyDict()
         self.loss.use_feat_loss = False
 
-        # type of gan {gan, lsgan, wgan gp}
-        self.loss.gan = Gan.wgan_gp
+        # type of gan {ga, lsgan, wgan gp, sngan}
+        self.loss.gan = Gan.sngan
         # weight of syn images' loss of D
         self.loss.alpha_adver_loss_syn = 1.0
         # weight for target area of reconstruction loss (0.7)
