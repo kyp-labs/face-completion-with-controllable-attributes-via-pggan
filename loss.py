@@ -123,7 +123,7 @@ class FaceGenLoss():
             else:
                 self.adver_loss_func = \
                     lambda p, t: -(torch.mean(t*torch.log(p+1e-8)) +
-                                        torch.mean((1-t)*torch.log(1-p+1e-8)))
+                                   torch.mean((1-t)*torch.log(1-p+1e-8)))
         else:
             raise ValueError('Invalid/Unsupported GAN: %s.' % gan)
 
