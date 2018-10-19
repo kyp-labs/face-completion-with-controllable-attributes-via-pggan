@@ -12,6 +12,7 @@ import torch
 from torch.nn.init import kaiming_normal_
 import torch.nn as nn
 from torch.nn import functional as F
+from util.spectral_norm import spectral_norm
 
 """
 TODO
@@ -45,7 +46,8 @@ def upsample(x, factor):
 class Dense(nn.Module):
     """Simple Fully Connected Network class."""
 
-    def __init__(self, in_channels, num_classes=1, nonlinearity=None):
+    def __init__(self, in_channels, num_classes=1,
+                 nonlinearity=None, spectralnorm=True):
         """constructor.
 
         Args:
@@ -55,6 +57,8 @@ class Dense(nn.Module):
         """
         super(Dense, self).__init__()
         self.linear = nn.Linear(in_channels, num_classes)
+        if spectralnorm:
+            self.linear = spectral_norm(self.linear)
         self.nonlinearity = nonlinearity
         if num_classes > 1:
             self.softmax = nn.Softmax(1)
@@ -84,7 +88,8 @@ class PGConv2d(nn.Module):
     """Simple Convolutional Network class for Progressive GAN."""
 
     def __init__(self, in_channels, out_channels, nonlinearity,
-                 kernel_size=3, stride=1, pad=1, instancenorm=True):
+                 kernel_size=3, stride=1, pad=1, instancenorm=True,
+                 spectralnorm=False):
         """constructor.
 
         Args:
@@ -96,11 +101,15 @@ class PGConv2d(nn.Module):
             pad: pad size, Default is 1.
             instancenorm (bool): Whether use instance normalization or not,
                                  Default is True.
+            spectralnorm (bool): Whether use spectral normalization or not,
+                                 Default is False.
         """
         super(PGConv2d, self).__init__()
 
         self.conv = nn.Conv2d(in_channels, out_channels,
                               kernel_size, stride, pad)
+        if spectralnorm:
+            self.conv = spectral_norm(self.conv)
         kaiming_normal_(self.conv.weight)
         self.instancenorm = instancenorm
         self.nonlinearity = nonlinearity
@@ -349,6 +358,7 @@ class G_DecBlock(nn.Module):
         x = self.conv2(x)
         if last:
             x = self.toRGB(x)
+            x = nn.Tanh()(x)
         return x
 
 
@@ -522,7 +532,7 @@ class D_Block(nn.Module):
     """Discriminator block class."""
 
     def __init__(self, in_channels, out_channels, num_channels, nonlinearity,
-                 instancenorm=True):
+                 instancenorm=True, spectralnorm=True):
         """constructor.
 
         Args:
@@ -532,14 +542,19 @@ class D_Block(nn.Module):
             nonlinearity: nonlinearity function
             instancenorm (bool): Whether use instance normalization or not,
                                  Default is True.
+            spectralnorm (bool): Whether use spectral normalization or not,
+                                 Default is True.
         """
         super(D_Block, self).__init__()
         self.fromRGB = PGConv2d(num_channels, in_channels, nonlinearity,
-                                kernel_size=1, pad=0, instancenorm=False)
+                                kernel_size=1, pad=0, instancenorm=False,
+                                spectralnorm=spectralnorm)
         self.conv1 = PGConv2d(in_channels, in_channels,
-                              nonlinearity, instancenorm=instancenorm)
+                              nonlinearity, instancenorm=instancenorm,
+                              spectralnorm=spectralnorm)
         self.conv2 = PGConv2d(in_channels, out_channels,
-                              nonlinearity, instancenorm=instancenorm)
+                              nonlinearity, instancenorm=instancenorm,
+                              spectralnorm=spectralnorm)
 
     def forward(self, x, first=False):
         """forward.
@@ -565,7 +580,7 @@ class D_LastBlock(nn.Module):
     """Discriminator's last block class."""
 
     def __init__(self, in_channels, out_channels, num_channels,
-                 nonlinearity, instancenorm=True):
+                 nonlinearity, instancenorm=True, spectralnorm=True):
         """constructor.
 
         Args:
@@ -575,15 +590,20 @@ class D_LastBlock(nn.Module):
             nonlinearity: nonlinearity function
             instancenorm (bool): Whether use instance normalization or not,
                                  Default is True.
+            spectralnorm (bool): Whether use spectral normalization or not,
+                                 Default is True.
         """
         super(D_LastBlock, self).__init__()
         self.fromRGB = PGConv2d(num_channels, in_channels, nonlinearity,
-                                kernel_size=1, pad=0)
+                                kernel_size=1, pad=0,
+                                spectralnorm=spectralnorm)
         self.conv1 = PGConv2d(in_channels, out_channels,
-                              nonlinearity, instancenorm=False)
+                              nonlinearity, instancenorm=False,
+                              spectralnorm=spectralnorm)
         self.conv2 = PGConv2d(in_channels, in_channels,
                               nonlinearity, kernel_size=4, stride=1,
-                              pad=0, instancenorm=False)
+                              pad=0, instancenorm=False,
+                              spectralnorm=spectralnorm)
 
     def forward(self, x, first=False):
         """forward.
@@ -623,7 +643,8 @@ class Discriminator(nn.Module):
                  num_attrs=1,
                  use_attrs=True,
                  leaky_relu=True,
-                 instancenorm=True):
+                 instancenorm=True,
+                 spectralnorm=True):
         """constructor.
 
         Args:
@@ -636,6 +657,7 @@ class Discriminator(nn.Module):
             use_attrs (bool): Whether use attributes or not.
             leaky_relu (bool): Use leaky_relu(True) or ReLU(False)
             instancenorm (bool): Whether use Instancenorm or not.
+            spectralnorm (bool): Whether use spectralnorm or not.
         """
         super(Discriminator, self).__init__()
 
@@ -651,15 +673,17 @@ class Discriminator(nn.Module):
 
         self.dblocks = []
         self.dblocks.extend([D_Block(nf(i), nf(i-1), num_channels,
-                            nonlinearity, instancenorm=instancenorm) for i in
+                            nonlinearity, instancenorm, spectralnorm) for i in
                              reversed(range(1, R-1))])
         self.dblocks.append(D_LastBlock(latent_size, latent_size, num_channels,
-                                        nonlinearity, instancenorm))
+                                        nonlinearity, instancenorm,
+                                        spectralnorm))
         self.dblocks = nn.ModuleList(self.dblocks)
-        self.dense1 = Dense(latent_size)
+        self.dense1 = Dense(latent_size, spectralnorm=spectralnorm)
 
         if self.use_attrs:
-            self.dense2 = Dense(latent_size, num_attrs)
+            self.dense2 = Dense(latent_size, num_attrs,
+                                spectralnorm=spectralnorm)
 
     def forward(self, x, cur_level=None):
         """forward.

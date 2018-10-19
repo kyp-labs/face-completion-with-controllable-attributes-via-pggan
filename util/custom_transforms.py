@@ -149,16 +149,6 @@ class ToTensor(object):
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation."""
 
-    def __init__(self, mean, std):
-        """constructor.
-
-        Args:
-            mean (float): mean value of an image.
-            std (float): standard deviation value of an image.
-        """
-        self.mean = mean
-        self.std = std
-
     def __call__(self, sample):
         """caller.
 
@@ -171,9 +161,7 @@ class Normalize(object):
         """
         for elem in ['image']:
             tmp = sample[elem]
-            if tmp.max() > 1:
-                tmp = tmp / 255.
-            tmp = (tmp - self.mean) / self.std
+            tmp = tmp/255 * 2 - 1
             sample[elem] = tmp
         return sample
 
