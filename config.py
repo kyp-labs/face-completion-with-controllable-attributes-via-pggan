@@ -237,7 +237,7 @@ class TestConfig(Config):
                                           64: 2048,
                                           128: 2048,
                                           256: 2048}
-        
+
         self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
 
 
