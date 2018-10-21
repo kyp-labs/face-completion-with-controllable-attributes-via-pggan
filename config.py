@@ -109,8 +109,8 @@ class Config():
         self.loss = EasyDict()
         self.loss.use_feat_loss = False
 
-        # type of gan {gan, lsgan, wgan gp}
-        self.loss.gan = Gan.wgan_gp
+        # type of gan {ga, lsgan, wgan gp, sngan}
+        self.loss.gan = Gan.sngan
         # weight of syn images' loss of D
         self.loss.alpha_adver_loss_syn = 1.0
         # weight for target area of reconstruction loss (0.7)
@@ -229,6 +229,16 @@ class TestConfig(Config):
                                  64: 4,
                                  128: 4,
                                  256: 2}  # Resolution-specific overrides
+
+        self.snapshot.sample_freq_dict = {4: 256,
+                                          8: 512,
+                                          16: 1024,
+                                          32: 1024,
+                                          64: 2048,
+                                          128: 2048,
+                                          256: 2048}
+
+        self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
 
 
 class ProductionConfig(Config):

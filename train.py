@@ -27,6 +27,7 @@ import util.custom_transforms as dt
 from model.model import Generator, Discriminator
 import util.util as util
 from util.util import Phase
+from util.util import Gan
 from util.util import Mode
 from util.replay import ReplayMemory
 from util.snapshot import Snapshot
@@ -119,6 +120,7 @@ class FaceGen():
                            leaky_relu=True,
                            instancenorm=True)
 
+        spectralnorm = True if self.config.loss.gan == Gan.sngan else False
         self.D = Discriminator(dataset_shape,
                                fmap_base=self.config.train.net.fmap_base,
                                fmap_min=self.config.train.net.min_resolution,
@@ -127,7 +129,8 @@ class FaceGen():
                                num_attrs=self.config.dataset.attibute_size,
                                use_attrs=self.use_attr,
                                leaky_relu=True,
-                               instancenorm=True)
+                               instancenorm=True,
+                               spectralnorm=spectralnorm)
 
         self.register_on_gpu()
         self.create_optimizer()
@@ -419,7 +422,6 @@ class FaceGen():
                                   mask=self.mask,
                                   cur_level=cur_level)
 
-            # self.syn = util.normalize_min_max(self.syn)
         if self.use_attr:
             self.cls_real, self.d_attr_real = self.D(self.real,
                                                      cur_level=cur_level)
@@ -503,7 +505,7 @@ class FaceGen():
             batch_size: flag for detaching syn image from generator graph
 
         """
-        transform_options = transforms.Compose([dt.Normalize(0.5, 0.5),
+        transform_options = transforms.Compose([dt.Normalize(),
                                                 dt.CenterSquareMask(),
                                                 dt.ToTensor()])
 

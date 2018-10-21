@@ -29,6 +29,7 @@ class Gan(Enum):
     gan = 1
     lsgan = 2
     wgan_gp = 3
+    sngan = 4
 
 
 class Phase(Enum):
