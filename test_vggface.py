@@ -4,6 +4,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 from model.model import Generator, Discriminator
+from model.stargan_model import StarGenerator, StarDiscriminator
 from util.datasets import VGGFace2Dataset
 
 from util.custom_transforms import Normalize, ToTensor
@@ -53,3 +54,23 @@ for res, lev in zip(resolutions_to, levels):
         cls2, attr2 = D(sample['image'], lev)  # transition state
         assert list(cls2.shape) == [batch_size, 1]
         assert list(attr2.shape) == [batch_size, num_attrs]
+
+
+dataset = VGGFace2Dataset('./dataset/VGGFACE2/train', 128,
+                          landmark_info_path, identity_info_path,
+                          filtered_list, transform=transform)
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+sample = iter(dataloader).next()  # noqa: B305
+
+S_G = StarGenerator(c_dim=1)
+S_D = StarDiscriminator(c_dim=1)
+
+img = sample['image']
+c = sample['attr']
+
+fake_img = S_G(img, c)
+assert list(fake_img.shape) == [batch_size, 3, 128, 128]
+
+_, out_cls = S_D(fake_img)
+assert list(out_cls.shape) == [batch_size, 1]

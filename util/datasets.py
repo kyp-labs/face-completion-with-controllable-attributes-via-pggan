@@ -116,22 +116,20 @@ class VGGFace2Dataset(Dataset):
                                 transform.ToTensor(),
                                 ]))
         """
-        file_list = []
-        dir_list = os.listdir(os.path.join(data_dir, str(resolution)))
         filtered_list = pd.read_csv(filtered_list)
+        dir_list = os.listdir(os.path.join(data_dir, str(resolution)))
         if use_low_res:
-            good_list = filtered_list[filtered_list['category'] !=
-                                      'Removed']['filename']
+            self.file_list = filtered_list[filtered_list['category'] !=
+                                      'Removed'][['filename']]  # noqa=E128
         else:
-            good_list = filtered_list[filtered_list['category'] ==
-                                      'Good']['filename']
+            self.file_list = filtered_list[filtered_list['category'] ==
+                                      'Good'][['filename']]  # noqa=E128
 
-        for ext in ('*.gif', '*.png', '*.jpg'):
-            full_path = os.path.normcase(data_dir + f'/{resolution}/*/' + ext)
-            file_list.extend(glob.glob(full_path))
+        def _name_to_path(filename):
+            return os.path.join(data_dir, str(resolution), filename)
 
-        self.file_list = [i for i in file_list if
-                          good_list.str.contains(os.path.basename(i)).any()]
+        self.file_list['filepath'] = self.file_list['filename'].apply(
+            _name_to_path)
 
         landmark_info = pd.read_csv(landmark_info_path)
         landmark_info = landmark_info[landmark_info['NAME_ID']
@@ -159,7 +157,7 @@ class VGGFace2Dataset(Dataset):
             sample (dict): {str: array} formatted data for training.
         """
         pattern = re.compile('n[0-9]{6}/[0-9]{4}_[0-9]{2}')
-        image_path = self.file_list[idx]
+        image_path = self.file_list['filepath'].iloc[idx]
         # For Windows OS
         image_path = image_path.replace("\\", "/")
         name_id = re.search(pattern, image_path)[0]
