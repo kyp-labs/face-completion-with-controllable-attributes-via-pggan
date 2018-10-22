@@ -98,6 +98,7 @@ class GeneratorLoss:
         recon_loss : reconstruction loss
         feat_loss : feature loss
         bdy_loss : boundary loss
+        cycle_loss : cycle consistency loss
 
     """
 
@@ -108,6 +109,7 @@ class GeneratorLoss:
         self.recon_loss = 0
         self.feat_loss = 0
         self.bdy_loss = 0
+        self.cycle_loss = 0
 
 
 class DiscriminatorLoss:

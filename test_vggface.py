@@ -13,7 +13,7 @@ from util.custom_transforms import Normalize, ToTensor
 landmark_info_path = './dataset/VGGFACE2/train/all_loose_landmarks_256.csv'
 identity_info_path = './dataset/VGGFACE2/identity_info.csv'
 filtered_list = './dataset/VGGFACE2/train/all_filtered_results.csv'
-transform = transforms.Compose([Normalize(0.5, 0.5),
+transform = transforms.Compose([Normalize(),
                                 ToTensor()])
 
 batch_size = 2
@@ -74,3 +74,4 @@ assert list(fake_img.shape) == [batch_size, 3, 128, 128]
 
 _, out_cls = S_D(fake_img)
 assert list(out_cls.shape) == [batch_size, 1]
+print(out_cls.shape)

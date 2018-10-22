@@ -126,6 +126,8 @@ class Config():
         self.loss.lambda_bdy = 5000.0
         # weight of attribute loss (paper = 2)
         self.loss.lambda_attr = 2.0
+        # weight of cycle consistency loss
+        self.loss.lambda_cycle = 10.0
 
         # mean filter size for calculation of boudnary loss
         self.loss.mean_filter_size = 7
@@ -143,8 +145,8 @@ class Config():
         self.optimizer.lrate = EasyDict()
         self.optimizer.lrate.rampup_rate = 0.2
         self.optimizer.lrate.rampdown_rate = 0.2
-        self.optimizer.lrate.G_base = 0.0002  # 1e-3
-        self.optimizer.lrate.D_base = 0.0002  # 1e-3
+        self.optimizer.lrate.G_base = 0.0001  # 1e-3
+        self.optimizer.lrate.D_base = 0.0001  # 1e-3
         self.optimizer.lrate.G_dict = {1024: 0.0015}
         self.optimizer.lrate.D_dict = EasyDict(self.optimizer.lrate.G_dict)
 
@@ -229,6 +231,58 @@ class TestConfig(Config):
                                  64: 4,
                                  128: 4,
                                  256: 2}  # Resolution-specific overrides
+
+        self.snapshot.sample_freq_dict = {4: 256,
+                                          8: 512,
+                                          16: 1024,
+                                          32: 1024,
+                                          64: 2048,
+                                          128: 2048,
+                                          256: 2048}
+
+        self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
+
+
+class StarGANConfig(Config):
+    """Test Configuration Class."""
+
+    def __init__(self):
+        """Initialize all configuration variables."""
+        super().__init__()
+        self.dataset.func = 'util.datasets.VGGFace2Dataset'
+        self.dataset.data_dir = './dataset/VGGFACE2/train'
+        self.dataset.landmark_path = './dataset/VGGFACE2/train/' +\
+            'all_loose_landmarks_256.csv'
+        self.dataset.identity_path =\
+            './dataset/VGGFACE2/identity_info.csv'
+        self.dataset.filtering_path =\
+            './dataset/VGGFACE2/train/all_filtered_results.csv'
+        self.dataset.num_classes = 3
+        self.dataset.num_channels = 3
+
+        self.loss.gan = Gan.wgan_gp
+
+        self.train.D_repeats = 5
+        self.train.total_size = 500000
+        self.train.train_size = 250000
+        self.train.transition_size = 250000
+
+        self.train.net.min_resolution = 128
+        self.train.net.max_resolution = 128
+
+        # weight of attribute loss (paper = 2)
+        self.loss.lambda_attr = 2.0
+        # weight of cycle consistency loss
+        self.loss.lambda_cycle = 10.0
+
+        self.sched.batch_base = 32  # Maximum batch size
+        self.sched.batch_dict = {4: 64,
+                                 8: 32,
+                                 16: 16,
+                                 32: 16,
+                                 64: 8,
+                                 128: 8,
+                                 256: 8}
 
         self.snapshot.sample_freq_dict = {4: 256,
                                           8: 512,
