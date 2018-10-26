@@ -55,7 +55,7 @@ class Config():
             'test_loose_landmark.csv'
         self.dataset.identity_path = \
             './dataset/VGGFACE2/test_identity_info.csv'
-        self.dataset.attibute_size = 1
+        self.dataset.attibute_size = 2
         self.dataset.num_classes = 3
         self.dataset.num_channels = 3
 
@@ -259,13 +259,15 @@ class StarGANConfig(Config):
             './dataset/VGGFACE2/train/all_filtered_results.csv'
         self.dataset.num_classes = 3
         self.dataset.num_channels = 3
-
+        
+        self.env.num_gpus = 2
+        
         self.loss.gan = Gan.wgan_gp
 
         self.train.D_repeats = 5
-        self.train.total_size = 500000
-        self.train.train_size = 250000
-        self.train.transition_size = 250000
+        self.train.total_size = 16000000
+        self.train.train_size = 8000000
+        self.train.transition_size = 8000000
 
         self.train.net.min_resolution = 128
         self.train.net.max_resolution = 128
@@ -280,17 +282,17 @@ class StarGANConfig(Config):
                                  8: 32,
                                  16: 16,
                                  32: 16,
-                                 64: 8,
-                                 128: 8,
+                                 64: 16,
+                                 128: 16,
                                  256: 8}
 
         self.snapshot.sample_freq_dict = {4: 256,
                                           8: 512,
-                                          16: 1024,
-                                          32: 1024,
-                                          64: 2048,
-                                          128: 2048,
-                                          256: 2048}
+                                          16: 512,
+                                          32: 512,
+                                          64: 512,
+                                          128: 512,
+                                          256: 512}
 
         self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
 

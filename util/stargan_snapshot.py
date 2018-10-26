@@ -11,8 +11,8 @@ from scipy.misc import imsave
 import torch
 import threading
 
-# import util.util as util
-# from util.logger import Logger
+import util.util as util
+from util.logger import Logger
 from util.util import Phase
 
 
@@ -127,7 +127,6 @@ class Snapshot(object):
         os.makedirs(self.sample_dir)
         os.makedirs(self.ckpt_dir)
 
-    '''
     def prepare_logging(self):
         """Prepare_logging."""
         root_log_dir = self.config.logging.log_dir
@@ -136,7 +135,6 @@ class Snapshot(object):
 
         self.log_dir = os.path.join(root_log_dir, self.current_time, "")
         self.logger = Logger(self.log_dir)
-    '''
 
     def snapshot(self,
                  global_it,
@@ -181,7 +179,7 @@ class Snapshot(object):
 
         # ===report ===
         self.line_summary(global_it, it, total_it, phase, cur_resol, cur_level)
-        # self.log_loss_to_tensorboard(global_it)
+        self.log_loss_to_tensorboard(global_it)
 
         args = (global_it, it, total_it, phase, cur_resol, cur_level,
                 minibatch_size, G, D, optim_G, optim_D)
@@ -238,8 +236,8 @@ class Snapshot(object):
             imsave(os.path.join(self.sample_dir, filename), samples)
 
         # ===tensorboard visualization===
-        # if (it % sample_freq == 1) or it == total_it:
-        #     self.log_weight_to_tensorboard(global_it, G, D)
+        if (it % sample_freq == 1) or it == total_it:
+            self.log_weight_to_tensorboard(global_it, G, D)
 
         # ===save model===
         if (it % save_freq == 1) or it == total_it:
@@ -271,7 +269,7 @@ class Snapshot(object):
         """
         formation = '%d [%dx%d](%d/%d)%.1f %s ' + \
                     '| G:%.3f, D:%.3f ' + \
-                    '| G_adv:%.3f, R:%.3f, F:%.3f, B:%.3f, C: %.3f' + \
+                    '| G_adv:%.3f, A:%.3f, R:%.3f, F:%.3f, B:%.3f, C: %.3f' + \
                     '| D_adv:%.3f(%.3f,%.3f), A:%.3f, GP:%.3f'
         values = (global_it,
                   cur_resol,
@@ -282,6 +280,7 @@ class Snapshot(object):
                   self.g_losses.g_loss,
                   self.d_losses.d_loss,
                   self.g_losses.g_adver_loss,
+                  self.g_losses.g_attr_loss,
                   self.g_losses.recon_loss,
                   self.g_losses.feat_loss,
                   self.g_losses.bdy_loss,
@@ -289,7 +288,7 @@ class Snapshot(object):
                   self.d_losses.d_adver_loss,
                   self.d_losses.d_adver_loss_real,
                   self.d_losses.d_adver_loss_syn,
-                  self.d_losses.att_loss,
+                  self.d_losses.d_attr_loss,
                   self.d_losses.gradient_penalty)
 
         print(formation % values)
@@ -334,7 +333,7 @@ class Snapshot(object):
 
         return samples
 
-    '''
+
     def log_loss_to_tensorboard(self, global_it):
         """Tensorboard.
 
@@ -347,6 +346,8 @@ class Snapshot(object):
                 self.g_losses.g_loss,
                 'Generator/Adversarial Loss':
                 self.g_losses.g_adver_loss,
+                'Generator/Attribute Loss':
+                self.g_losses.g_attr_loss,
                 'Generator/Reconstruction Loss':
                 self.g_losses.recon_loss,
                 'Generator/Feature Loss':
@@ -363,6 +364,8 @@ class Snapshot(object):
                 self.d_losses.d_adver_loss_real,
                 'Discriminator/Adversarial Loss (S)':
                 self.d_losses.d_adver_loss_syn,
+                'Discriminator/Attribute Loss':
+                self.d_losses.d_attr_loss,
                 'Discriminator/Gradient Penalty':
                 self.d_losses.gradient_penalty}
 
@@ -400,4 +403,3 @@ class Snapshot(object):
                                           util.tensor2numpy(self.use_cuda,
                                                             value.grad),
                                           global_it)
-    '''

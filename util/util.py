@@ -106,6 +106,8 @@ class GeneratorLoss:
         """Init attributes."""
         self.g_loss = 0
         self.g_adver_loss = 0
+        self.g_adver_loss = 0
+        self.g_attr_loss = 0
         self.recon_loss = 0
         self.feat_loss = 0
         self.bdy_loss = 0
@@ -131,7 +133,7 @@ class DiscriminatorLoss:
         self.d_adver_loss = 0
         self.d_adver_loss_syn = 0
         self.d_adver_loss_real = 0
-        self.att_loss = 0
+        self.d_attr_loss = 0
         self.gradient_penalty_loss = 0
 
 

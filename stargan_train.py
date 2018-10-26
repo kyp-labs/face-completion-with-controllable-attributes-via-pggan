@@ -126,7 +126,7 @@ class FaceGenStarGAN():
 
         # restore
         self.snapshot = Snapshot(self.config, self.use_cuda)
-        # self.snapshot.prepare_logging()
+        self.snapshot.prepare_logging()
         self.snapshot.restore_model(self.G, self.D, self.optim_G, self.optim_D)
 
     def train(self):
@@ -250,6 +250,7 @@ class FaceGenStarGAN():
                         self.obs = sample_batched['image']
 
                     self.attr_obs = self.generate_attr_obs(self.attr_real)
+                    # self.attr_obs = self.attr_real
 
                     cur_nimg = self.train_step(batch_size,
                                                cur_it,
@@ -317,31 +318,26 @@ class FaceGenStarGAN():
         self.preprocess()
 
         # Training discriminator
-        d_cnt = 0
-        if d_cnt < self.D_repeats:
+        self.update_lr(cur_it, total_it, replay_mode)
+        self.optim_D.zero_grad()
+        self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
+        self.backward_D(cur_level)
 
-            self.update_lr(cur_it, total_it, replay_mode)
-            self.optim_D.zero_grad()
-            self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
-            self.backward_D(cur_level)
-
-            if self.config.replay.enabled and replay_mode is False:
-                self.replay_memory.append(cur_resol,
-                                          self.real,
-                                          self.attr_real,
-                                          self.mask,
-                                          self.obs,
-                                          self.attr_obs,
-                                          self.syn.detach())
-            d_cnt += 1
+        if self.config.replay.enabled and replay_mode is False:
+            self.replay_memory.append(cur_resol,
+                                      self.real,
+                                      self.attr_real,
+                                      self.mask,
+                                      self.obs,
+                                      self.attr_obs,
+                                      self.syn.detach())
 
         # Training generator
-        if d_cnt == self.D_repeats:
+        if cur_it % self.D_repeats == 0:
             # Training generator
             self.optim_G.zero_grad()
             self.forward_G(cur_level)
             self.backward_G(cur_level)
-            d_cnt = 0
 
         # model intermediate results
         self.snapshot.snapshot(self.global_it,
@@ -443,6 +439,7 @@ class FaceGenStarGAN():
             and self.config.env.num_gpus > 0
         if self.use_cuda:
             gpus = str(list(range(self.config.env.num_gpus)))
+            os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
             os.environ['CUDA_VISIBLE_DEVICES'] = gpus
 
     def register_on_gpu(self):
@@ -561,7 +558,7 @@ class FaceGenStarGAN():
                                                total_it,
                                                rampdown_it)
             param_group['lr'] = lrate_coef * self.G_lrate
-            print("learning rate %f" % (param_group['lr']))
+            # print("learning rate %f" % (param_group['lr']))
 
         for param_group in self.optim_D.param_groups:
             lrate_coef = self.rampup(cur_it, rampup_it)

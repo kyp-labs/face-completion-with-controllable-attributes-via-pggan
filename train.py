@@ -340,31 +340,26 @@ class FaceGen():
         self.preprocess()
 
         # Training discriminator
-        d_cnt = 0
-        if d_cnt < self.D_repeats:
+        self.update_lr(cur_it, total_it, replay_mode)
+        self.optim_D.zero_grad()
+        self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
+        self.backward_D(cur_level)
 
-            self.update_lr(cur_it, total_it, replay_mode)
-            self.optim_D.zero_grad()
-            self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
-            self.backward_D(cur_level)
-
-            if self.config.replay.enabled and replay_mode is False:
-                self.replay_memory.append(cur_resol,
-                                          self.real,
-                                          self.attr_real,
-                                          self.mask,
-                                          self.obs,
-                                          self.attr_obs,
-                                          self.syn.detach())
-            d_cnt += 1
+        if self.config.replay.enabled and replay_mode is False:
+            self.replay_memory.append(cur_resol,
+                                      self.real,
+                                      self.attr_real,
+                                      self.mask,
+                                      self.obs,
+                                      self.attr_obs,
+                                      self.syn.detach())
 
         # Training generator
-        if d_cnt == self.D_repeats:
+        if cur_it % self.D_repeats == 0:
             # Training generator
             self.optim_G.zero_grad()
             self.forward_G(cur_level)
             self.backward_G()
-            d_cnt = 0
 
         # model intermediate results
         self.snapshot.snapshot(self.global_it,

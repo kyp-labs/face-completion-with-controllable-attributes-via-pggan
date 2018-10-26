@@ -138,7 +138,7 @@ class VGGFace2Dataset(Dataset):
         identity_info = identity_info[identity_info['Class_ID']
                                       .str.contains('|'.join(dir_list))]
         identity_info[' Gender'] = identity_info[' Gender'].apply(
-            lambda x: 2 if x == ' f' else 1)
+            lambda x: [0, 1] if x == ' f' else [1, 0])
 
         self.landmark_info = landmark_info
         self.identity_info = identity_info

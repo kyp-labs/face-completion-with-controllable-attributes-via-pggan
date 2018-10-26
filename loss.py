@@ -21,7 +21,7 @@ This module includes following loss related classes.
 """
 
 import torch
-
+import torch.nn.functional as F
 from torchvision.models import vgg16
 from torch import autograd
 from torch import nn
@@ -195,33 +195,23 @@ class FaceGenLoss():
                                   only_inputs=True)[0]
 
         gradients = gradients.view(gradients.size(0), -1)
-        return ((gradients.norm(2, dim=1) - 1.0) ** 2).mean() * self.lambda_GP
+        return ((gradients.norm(2, dim=1) - 1.0) ** 2).mean()
 
-    def calc_att_loss(self, attr_real, d_attr_real, attr_obs, d_attr_obs):
+    def calc_attr_loss(self, prediction, target):
         """Calculate attribute loss.
-
         Args:
             attr_real: attribute of real images
             d_attr_real : classes for attributes of real images
             attr_obs : attributes of observed images
             d_attr_obs : classes for attributes of observed images
-
         """
-        if self.config.train.use_attr is False:
-            return 0
-
-        # cross entropy loss
-        # N = attr_real.shape[0]
-        if self.pytorch_loss_use:
-            attr_loss_real = self.attr_loss_func(d_attr_real, attr_real)
-            attr_loss_obs = self.attr_loss_func(d_attr_obs, attr_obs)
-        else:
-            attr_loss_real = self.attr_loss_func(d_attr_real, attr_real)
-            attr_loss_obs = self.attr_loss_func(d_attr_obs, attr_obs)
-
-        attr_loss = attr_loss_real + attr_loss_obs
+        # cross entropy loss with logit
+        attr_loss = F.binary_cross_entropy_with_logits(prediction,
+                                                       target,
+                                                       size_average=False) \
+                                                       / prediction.size(0)
         return attr_loss
-
+    
     def calc_feat_loss(self, real, syn):
         """Calculate feature loss.
 
@@ -332,6 +322,8 @@ class FaceGenLoss():
 
         # adversarial loss
         self.g_losses.g_adver_loss = self.calc_adver_loss(cls_syn, True, 1)
+        # attribute loss
+        self.g_losses.g_attr_loss = self.calc_attr_loss(d_attr_obs, attr_obs)
         # feature loss
         self.g_losses.feat_loss = self.calc_feat_loss(real, syn)
 
@@ -345,6 +337,7 @@ class FaceGenLoss():
             self.g_losses.bdy_loss = 0
 
         self.g_losses.g_loss = self.g_losses.g_adver_loss + \
+            self.lambda_attr*self.g_losses.g_attr_loss + \
             self.lambda_recon*self.g_losses.recon_loss + \
             self.lambda_feat*self.g_losses.feat_loss + \
             self.lambda_bdy*self.g_losses.bdy_loss
@@ -388,10 +381,8 @@ class FaceGenLoss():
             self.alpha_adver_loss_syn * self.d_losses.d_adver_loss_syn
 
         # attribute loss
-        self.d_losses.att_loss = self.calc_att_loss(attr_real,
-                                                    d_attr_real,
-                                                    attr_obs,
-                                                    d_attr_obs)
+        self.d_losses.d_att_loss = self.calc_attr_loss(d_attr_real, attr_real)
+
         if self.gan == Gan.wgan_gp:
             self.d_losses.gradient_penalty = \
                 self.calc_gradient_penalty(D,
@@ -402,8 +393,8 @@ class FaceGenLoss():
             self.d_losses.gradient_penalty = 0.0
 
         self.d_losses.d_loss = self.d_losses.d_adver_loss + \
-            self.lambda_attr*self.d_losses.att_loss + \
-            self.d_losses.gradient_penalty
+            self.lambda_attr*self.d_losses.d_attr_loss + \
+            self.lambda_GP*self.d_losses.gradient_penalty
         return self.d_losses
 
 
