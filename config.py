@@ -257,6 +257,7 @@ class StarGANConfig(Config):
             './dataset/VGGFACE2/identity_info.csv'
         self.dataset.filtering_path =\
             './dataset/VGGFACE2/train/all_filtered_results.csv'
+        self.dataset.attibute_size = 2
         self.dataset.num_classes = 3
         self.dataset.num_channels = 3
         
@@ -265,15 +266,15 @@ class StarGANConfig(Config):
         self.loss.gan = Gan.wgan_gp
 
         self.train.D_repeats = 5
-        self.train.total_size = 16000000
-        self.train.train_size = 8000000
-        self.train.transition_size = 8000000
+        self.train.total_size = 64000000
+        self.train.train_size = 32000000
+        self.train.transition_size = 32000000
 
         self.train.net.min_resolution = 128
         self.train.net.max_resolution = 128
 
         # weight of attribute loss (paper = 2)
-        self.loss.lambda_attr = 2.0
+        self.loss.lambda_attr = 1.0
         # weight of cycle consistency loss
         self.loss.lambda_cycle = 10.0
 

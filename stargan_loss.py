@@ -149,12 +149,7 @@ class FaceGenLoss():
         interpolates = util.tofloat(self.use_cuda, interpolates)
         interpolates = autograd.Variable(interpolates, requires_grad=True)
 
-        if self.config.train.use_attr:
-            # need cur_level
-            cls_interpolates, attr_interpolates = D(interpolates)
-        else:
-            # need cur_level
-            cls_interpolates = D(interpolates)
+        cls_interpolates, attr_interpolates = D(interpolates)
 
         cls_interpolates = cls_interpolates[:1, :]  # temporary code
         grad_outputs = util.tofloat(self.use_cuda,
@@ -201,7 +196,8 @@ class FaceGenLoss():
         pred_real = G(syn, attr_real)
 
         # L1 norm
-        cycle_loss = F.l1_loss(pred_real, real, size_average=True)
+        # cycle_loss = F.l1_loss(pred_real, real, size_average=True)
+        cycle_loss =  torch.mean(torch.abs(real - pred_real))
         return cycle_loss
 
     def calc_G_loss(self,

@@ -318,7 +318,7 @@ class FaceGenStarGAN():
         self.preprocess()
 
         # Training discriminator
-        self.update_lr(cur_it, total_it, replay_mode)
+        self.update_lr(cur_it, total_it, replay_mode)   
         self.optim_D.zero_grad()
         self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
         self.backward_D(cur_level)
@@ -536,7 +536,7 @@ class FaceGenStarGAN():
 
         return 1.0
 
-    def update_lr(self, cur_it, total_it, replay_mode=False):
+    def update_lr_old(self, cur_it, total_it, replay_mode=False):
         """Update learning rate.
 
         Args:
@@ -566,3 +566,30 @@ class FaceGenStarGAN():
                                                self.total_size,
                                                rampdown_it)
             param_group['lr'] = lrate_coef * self.D_lrate
+            
+    def update_lr(self, cur_it, total_it, replay_mode=False):
+        """Update learning rate.
+
+        Args:
+            cur_it: current # of iterations in the phasek
+            total_it: total # of iterations in the phase
+            replay_mode: memory replay mode
+
+        """
+        if replay_mode:
+            return
+        
+        # Decay learning rates.
+        num_iters_decay = total_it//2
+        lr_update_step = 1000
+        if cur_it % lr_update_step == 0 \
+            and cur_it > (total_it - num_iters_decay):
+            self.G_lrate -= (self.G_lrate / float(num_iters_decay))
+            self.D_lrate -= (self.D_lrate / float(num_iters_decay))
+            
+            for param_group in self.optim_G.param_groups:
+                param_group['lr'] = self.G_lrate
+            for param_group in self.optim_D.param_groups:
+                param_group['lr'] = self.D_lrate
+                
+            print('Learning Rate, G: {}, D: {}.'.format(self.G_lrate, self.D_lrate))
