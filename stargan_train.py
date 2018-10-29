@@ -21,7 +21,7 @@ import torch.optim as optim
 import numpy as np
 from torchvision import transforms
 from torch.utils.data import DataLoader
-import util.custom_transforms as dt
+from torchvision import transforms as T
 
 from model.stargan_model import StarGenerator, StarDiscriminator
 import util.util as util
@@ -318,7 +318,7 @@ class FaceGenStarGAN():
         self.preprocess()
 
         # Training discriminator
-        self.update_lr(cur_it, total_it, replay_mode)   
+        self.update_lr(cur_it, total_it, replay_mode)
         self.optim_D.zero_grad()
         self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
         self.backward_D(cur_level)
@@ -456,9 +456,13 @@ class FaceGenStarGAN():
             batch_size: flag for detaching syn image from generator graph
 
         """
-        transform_options = transforms.Compose([dt.Normalize(),
-                                                dt.CenterSquareMask(),
-                                                dt.ToTensor()])
+        transform = []
+        transform.append(T.RandomHorizontalFlip()
+        transform.append(T.CenterCrop(crop_size)
+        transform.append(T.Resize(image_size)
+        transform.append(T.ToTensor())
+        transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+        transform = T.Compose(transform)
 
         dataset_func = self.config.dataset.func
         ds = self.config.dataset
@@ -467,7 +471,7 @@ class FaceGenStarGAN():
                                           landmark_info_path=ds.landmark_path,
                                           identity_info_path=ds.identity_path,
                                           filtered_list=ds.filtering_path,
-                                          transform=transform_options,
+                                          transform=transform,
                                           func=dataset_func)
 
         # train_dataset & data loader
@@ -566,7 +570,7 @@ class FaceGenStarGAN():
                                                self.total_size,
                                                rampdown_it)
             param_group['lr'] = lrate_coef * self.D_lrate
-            
+
     def update_lr(self, cur_it, total_it, replay_mode=False):
         """Update learning rate.
 
@@ -578,7 +582,7 @@ class FaceGenStarGAN():
         """
         if replay_mode:
             return
-        
+
         # Decay learning rates.
         num_iters_decay = total_it//2
         lr_update_step = 1000
@@ -586,10 +590,10 @@ class FaceGenStarGAN():
             and cur_it > (total_it - num_iters_decay):
             self.G_lrate -= (self.G_lrate / float(num_iters_decay))
             self.D_lrate -= (self.D_lrate / float(num_iters_decay))
-            
+
             for param_group in self.optim_G.param_groups:
                 param_group['lr'] = self.G_lrate
             for param_group in self.optim_D.param_groups:
                 param_group['lr'] = self.D_lrate
-                
+
             print('Learning Rate, G: {}, D: {}.'.format(self.G_lrate, self.D_lrate))
