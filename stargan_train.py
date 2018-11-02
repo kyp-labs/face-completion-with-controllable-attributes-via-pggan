@@ -21,10 +21,11 @@ import torch.optim as optim
 import numpy as np
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from torchvision import transforms as T
+from torchvision import transforms as dt
 
 from model.stargan_model import StarGenerator, StarDiscriminator
 import util.util as util
+from util.custom_transforms import PolygonMask
 from util.util import Phase
 from util.util import Mode
 from util.replay import ReplayMemory
@@ -456,13 +457,15 @@ class FaceGenStarGAN():
             batch_size: flag for detaching syn image from generator graph
 
         """
-        transform = []
-        transform.append(T.RandomHorizontalFlip()
-        transform.append(T.CenterCrop(crop_size)
-        transform.append(T.Resize(image_size)
-        transform.append(T.ToTensor())
-        transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        transform = T.Compose(transform)
+        crop_size = 178
+        image_size = 128
+        transform_options = transforms.Compose([PolygonMask(),
+                                                dt.RandomHorizontalFlip(),
+                                                dt.CenterCrop(crop_size),
+                                                dt.Resize(image_size),
+                                                dt.ToTensor(),
+                                                dt.Normalize(mean=(0.5,0.5,0.5),
+                                                    std=(0.5,0.5,0.5))])
 
         dataset_func = self.config.dataset.func
         ds = self.config.dataset
@@ -471,7 +474,7 @@ class FaceGenStarGAN():
                                           landmark_info_path=ds.landmark_path,
                                           identity_info_path=ds.identity_path,
                                           filtered_list=ds.filtering_path,
-                                          transform=transform,
+                                          transform=transform_options,
                                           func=dataset_func)
 
         # train_dataset & data loader
