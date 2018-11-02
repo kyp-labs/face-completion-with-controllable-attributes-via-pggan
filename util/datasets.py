@@ -167,9 +167,9 @@ class VGGFace2Dataset(Dataset):
 
         landmark = self.landmark_info[self.landmark_info['NAME_ID'] ==
                                       name_id].iloc[:, 2:].values.flatten()
-        image_arr = np.array(Image.open(image_path))
+        image_pil = Image.open(image_path)
 
-        sample = {'image': image_arr, 'landmark': landmark, 'attr': gender}
+        sample = {'image': image_pil, 'landmark': landmark, 'attr': gender}
         if self.transform is not None:
             sample = self.transform(sample)
         return sample

@@ -1,17 +1,12 @@
 """train.py.
-
 This module includes the FaceGen class
 which has a model and train methods implementing the paper
 'High-Resolution Image Synthesis and
     Semantic Manipulation with Conditional GANs'.
-
-
 Example:
     Run this module without options (:
         $ python train.py
-
 Note that all configrations for FaceGen are in self.config.py.
-
 """
 
 import os
@@ -21,10 +16,11 @@ import torch.optim as optim
 import numpy as np
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from torchvision import transforms as T
+from torchvision import transforms as dt
 
 from model.stargan_model import StarGenerator, StarDiscriminator
 import util.util as util
+from util.custom_transforms import PolygonMask
 from util.util import Phase
 from util.util import Mode
 from util.replay import ReplayMemory
@@ -35,7 +31,6 @@ from stargan_loss import FaceGenLoss
 
 class FaceGenStarGAN():
     """FaceGen Classes.
-
     Attributes:
         D_repeats : How many times the discriminator is trained per G iteration
         total_size : Total # of real images in the training
@@ -65,12 +60,10 @@ class FaceGenStarGAN():
         cls_syn : classes for synthesized images
         d_attr_real : classes for attributes of real images
         d_attr_obs : classes for attributes of observed images
-
     """
 
     def __init__(self, config):
         """Class initializer.
-
         1. Read configurations from self.config.py
         2. Check gpu availability
         3. Create a model and training related objects
@@ -79,7 +72,6 @@ class FaceGenStarGAN():
         - Loss and loss histories
         - Replay memory
         - Snapshot
-
         """
         self.config = config
         self.D_repeats = self.config.train.D_repeats
@@ -131,7 +123,6 @@ class FaceGenStarGAN():
 
     def train(self):
         """Training for progressive growing model.
-
         1. Calculate min/max resolution for a model
         2. for each layer
             2-1. for each phases
@@ -139,7 +130,6 @@ class FaceGenStarGAN():
                 2) remainder layers : {transition, traning}
                 3) optional : {replaying}
                 do train one step
-
         """
         min_resol = int(np.log2(self.config.train.net.min_resolution))
         max_resol = int(np.log2(self.config.train.net.max_resolution))
@@ -296,11 +286,9 @@ class FaceGenStarGAN():
                    cur_nimg,
                    replay_mode=False):
         """Training one step.
-
         1. Train discrmininator for [D_repeats]
         2. Train generator
         3. Snapshot
-
         Args:
             batch_size: batch size
             cur_it: current # of iterations in the phases of the layer
@@ -310,10 +298,8 @@ class FaceGenStarGAN():
             cur_level: progress indicator of progressive growing network
             cur_nimg: current # of images in the phase
             replay_mode: Memory replay mode
-
         Returns:
             cur_nimg: updated # of images in the phase
-
         """
         self.preprocess()
 
@@ -361,21 +347,17 @@ class FaceGenStarGAN():
 
     def forward_G(self, cur_level):
         """Forward generator.
-
         Args:
             cur_level: progress indicator of progressive growing network
-
         """
         self.cls_syn, self.d_attr_obs = self.D(self.syn)
 
     def forward_D(self, cur_level, detach=True, replay_mode=False):
         """Forward discriminator.
-
         Args:
             cur_level: progress indicator of progressive growing network
             detach: flag whether to detach graph from generator or not
             replay_mode: memory replay mode
-
         """
         self.syn = self.G(self.obs, self.attr_real)
 
@@ -403,11 +385,9 @@ class FaceGenStarGAN():
 
     def backward_D(self, cur_level, retain_graph=True):
         """Backward discriminator.
-
         Args:
             cur_level: progress indicator of progressive growing network
             retain_graph: flag whether to retain graph of discriminator or not
-
         """
         self.loss.calc_D_loss(self.D,
                               cur_level,
@@ -450,22 +430,19 @@ class FaceGenStarGAN():
 
     def load_train_set(self, resol, batch_size):
         """Load train set.
-
         Args:
             resol: progress indicator of progressive growing network
             batch_size: flag for detaching syn image from generator graph
-
         """
-        crop_size = 178 # celebA
-        image_size = self.config.train.net.min_resolution
-        transform = []
-        transform.append(T.RandomHorizontalFlip())
-        transform.append(T.CenterCrop(crop_size))
-        transform.append(T.Resize(image_size))
-        transform.append(T.ToTensor())
-        transform.append(T.Normalize(mean=(0.5, 0.5, 0.5),
-                                     std=(0.5, 0.5, 0.5)))
-        transform = T.Compose(transform)
+        crop_size = 178
+        image_size = 128
+        transform_options = transforms.Compose([PolygonMask(),
+                                                dt.RandomHorizontalFlip(),
+                                                dt.CenterCrop(crop_size),
+                                                dt.Resize(image_size),
+                                                dt.ToTensor(),
+                                                dt.Normalize(mean=(0.5,0.5,0.5),
+                                                    std=(0.5,0.5,0.5))])
 
         dataset_func = self.config.dataset.func
         ds = self.config.dataset
@@ -474,7 +451,7 @@ class FaceGenStarGAN():
                                           landmark_info_path=ds.landmark_path,
                                           identity_info_path=ds.identity_path,
                                           filtered_list=ds.filtering_path,
-                                          transform=transform,
+                                          transform=transform_options,
                                           func=dataset_func)
 
         # train_dataset & data loader
@@ -482,9 +459,7 @@ class FaceGenStarGAN():
 
     def generate_attr_obs(self, attr_real):
         """Generate attributes of observed images.
-
             - change randomly chosen one attribute of 50% of real images
-
         Args:
             attr_real: attributes of real images
         """
@@ -516,11 +491,9 @@ class FaceGenStarGAN():
 
     def rampup(self, cur_it, rampup_it):
         """Ramp up learning rate.
-
         Args:
             cur_it: current # of iterations in the phase
             rampup_it: # of iterations for ramp up
-
         """
         if cur_it < rampup_it:
             p = max(0.0, float(cur_it)) / float(rampup_it)
@@ -531,12 +504,10 @@ class FaceGenStarGAN():
 
     def rampdown_linear(self, cur_it, total_it, rampdown_it):
         """Ramp down learning rate.
-
         Args:
             cur_it: current # of iterations in the phasek
             total_it: total # of iterations in the phase
             rampdown_it: # of iterations for ramp down
-
         """
         if cur_it >= total_it - rampdown_it:
             return float(total_it - cur_it) / rampdown_it
@@ -545,12 +516,10 @@ class FaceGenStarGAN():
 
     def update_lr_old(self, cur_it, total_it, replay_mode=False):
         """Update learning rate.
-
         Args:
             cur_it: current # of iterations in the phasek
             total_it: total # of iterations in the phase
             replay_mode: memory replay mode
-
         """
         if replay_mode:
             return
@@ -576,12 +545,10 @@ class FaceGenStarGAN():
 
     def update_lr(self, cur_it, total_it, replay_mode=False):
         """Update learning rate.
-
         Args:
             cur_it: current # of iterations in the phasek
             total_it: total # of iterations in the phase
             replay_mode: memory replay mode
-
         """
         if replay_mode:
             return
