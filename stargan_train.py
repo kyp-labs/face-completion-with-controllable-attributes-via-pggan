@@ -456,12 +456,15 @@ class FaceGenStarGAN():
             batch_size: flag for detaching syn image from generator graph
 
         """
+        crop_size = 178 # celebA
+        image_size = self.config.train.net.min_resolution
         transform = []
-        transform.append(T.RandomHorizontalFlip()
-        transform.append(T.CenterCrop(crop_size)
-        transform.append(T.Resize(image_size)
+        transform.append(T.RandomHorizontalFlip())
+        transform.append(T.CenterCrop(crop_size))
+        transform.append(T.Resize(image_size))
         transform.append(T.ToTensor())
-        transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+        transform.append(T.Normalize(mean=(0.5, 0.5, 0.5),
+                                     std=(0.5, 0.5, 0.5)))
         transform = T.Compose(transform)
 
         dataset_func = self.config.dataset.func

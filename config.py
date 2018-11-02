@@ -135,10 +135,10 @@ class Config():
         # Optimizer
         self.optimizer = EasyDict()
         self.optimizer.G_opt = EasyDict(beta1=0.5,  # generator optimizer
-                                        beta2=0.99,
+                                        beta2=0.999,
                                         epsilon=1e-8)
         self.optimizer.D_opt = EasyDict(beta1=0.5,  # discriminator optimizer
-                                        beta2=0.99,
+                                        beta2=0.999,
                                         epsilon=1e-8)
 
         # Learning Rate
