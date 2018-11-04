@@ -16,11 +16,10 @@ import torch.optim as optim
 import numpy as np
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from torchvision import transforms as dt
 
 from model.stargan_model import StarGenerator, StarDiscriminator
 import util.util as util
-from util.custom_transforms import PolygonMask
+import util.custom_transforms as dt
 from util.util import Phase
 from util.util import Mode
 from util.replay import ReplayMemory
@@ -230,7 +229,10 @@ class FaceGenStarGAN():
                     # get a next batch - temporary code
                     self.real = sample_batched['image']
                     self.attr_real = sample_batched['attr']
-                    self.mask = sample_batched['mask']
+                    N = self.attr_real.shape[0]
+                    self.attr_real = self.attr_real.view(N, -1)
+
+                    self.mask = sample_batched['obs_mask']
                     N, H, W = self.mask.shape
                     self.mask = self.mask.reshape((N, 1, H, W))
 
@@ -434,9 +436,9 @@ class FaceGenStarGAN():
             resol: progress indicator of progressive growing network
             batch_size: flag for detaching syn image from generator graph
         """
-        crop_size = 178
-        image_size = 128
-        transform_options = transforms.Compose([PolygonMask(),
+        crop_size = self.config.train.net.min_resolution
+        image_size = self.config.train.net.min_resolution
+        transform_options = transforms.Compose([dt.PolygonMask(),
                                                 dt.RandomHorizontalFlip(),
                                                 dt.CenterCrop(crop_size),
                                                 dt.Resize(image_size),

@@ -74,9 +74,9 @@ class Snapshot(object):
         pattern = which_file.split('-')
         self._global_it = int(pattern[0])
         self._resolution = int(pattern[1].split('x')[1])
-        self._phase = Phase.training if pattern[1] == "training" \
+        self._phase = Phase.training if pattern[2] == "Phase.training" \
             else Phase.transition
-        self._it = int(pattern[3])
+        self._it = int(pattern[3].split('.')[0])
 
         tmp = restore_dir.split('/')
         self.exp_dir = '/'.join(tmp[:-1])
