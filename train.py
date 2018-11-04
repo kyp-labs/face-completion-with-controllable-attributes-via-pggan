@@ -258,12 +258,15 @@ class FaceGen():
                         cur_level = float(R - min_resol + float(cur_it/to_it))
                     else:
                         # training
-                        cur_level = float(R - min_resol + 1)
+                        cur_level = float(R - min_resol + 1.0)
 
                     # get a next batch - temporary code
                     self.real = sample_batched['image']
                     self.attr_real = sample_batched['attr']
-                    self.mask = sample_batched['mask']
+                    N = self.attr_real.shape[0]
+                    self.attr_real = self.attr_real.view(N, -1)
+                    
+                    self.mask = sample_batched['obs_mask']
                     N, H, W = self.mask.shape
                     self.mask = self.mask.reshape((N, 1, H, W))
 
@@ -359,7 +362,7 @@ class FaceGen():
             # Training generator
             self.optim_G.zero_grad()
             self.forward_G(cur_level)
-            self.backward_G()
+            self.backward_G(cur_level)
 
         # model intermediate results
         self.snapshot.snapshot(self.global_it,
@@ -430,9 +433,11 @@ class FaceGen():
             self.d_attr_real = 0
             self.d_attr_obs = 0
 
-    def backward_G(self):
+    def backward_G(self, cur_level):
         """Backward generator."""
-        self.loss.calc_G_loss(self.real,
+        self.loss.calc_G_loss(self.G,
+                              cur_level,
+                              self.real,
                               self.obs,
                               self.attr_real,
                               self.attr_obs,
@@ -494,15 +499,15 @@ class FaceGen():
 
     def load_train_set(self, resol, batch_size):
         """Load train set.
-
         Args:
             resol: progress indicator of progressive growing network
             batch_size: flag for detaching syn image from generator graph
-
         """
-        transform_options = transforms.Compose([dt.Normalize(),
-                                                dt.CenterSquareMask(),
-                                                dt.ToTensor()])
+        transform_options = transforms.Compose([dt.PolygonMask(),
+                                                # dt.RandomHorizontalFlip(),
+                                                dt.ToTensor(),
+                                                dt.Normalize(mean=(0.5,0.5,0.5),
+                                                    std=(0.5,0.5,0.5))])
 
         dataset_func = self.config.dataset.func
         ds = self.config.dataset
@@ -551,65 +556,31 @@ class FaceGen():
                                   betas=(self.config.optimizer.D_opt.beta1,
                                   self.config.optimizer.D_opt.beta2))
 
-    def rampup(self, cur_it, rampup_it):
-        """Ramp up learning rate.
-
-        Args:
-            cur_it: current # of iterations in the phase
-            rampup_it: # of iterations for ramp up
-
-        """
-        if cur_it < rampup_it:
-            p = max(0.0, float(cur_it)) / float(rampup_it)
-            p = 1.0 - p
-            return np.exp(-p*p*5.0)
-        else:
-            return 1.0
-
-    def rampdown_linear(self, cur_it, total_it, rampdown_it):
-        """Ramp down learning rate.
-
-        Args:
-            cur_it: current # of iterations in the phasek
-            total_it: total # of iterations in the phase
-            rampdown_it: # of iterations for ramp down
-
-        """
-        if cur_it >= total_it - rampdown_it:
-            return float(total_it - cur_it) / rampdown_it
-
-        return 1.0
 
     def update_lr(self, cur_it, total_it, replay_mode=False):
         """Update learning rate.
-
         Args:
             cur_it: current # of iterations in the phasek
             total_it: total # of iterations in the phase
             replay_mode: memory replay mode
-
         """
         if replay_mode:
             return
 
-        rampup_it = total_it * self.config.optimizer.lrate.rampup_rate
-        rampdown_it = total_it * self.config.optimizer.lrate.rampdown_rate
+        # Decay learning rates.
+        num_iters_decay = total_it//2
+        lr_update_step = 1000
+        if cur_it % lr_update_step == 0 \
+            and cur_it > (total_it - num_iters_decay):
+            self.G_lrate -= (self.G_lrate / float(num_iters_decay))
+            self.D_lrate -= (self.D_lrate / float(num_iters_decay))
 
-        # learning rate rampup & down
-        for param_group in self.optim_G.param_groups:
-            lrate_coef = self.rampup(cur_it, rampup_it)
-            lrate_coef *= self.rampdown_linear(cur_it,
-                                               total_it,
-                                               rampdown_it)
-            param_group['lr'] = lrate_coef * self.G_lrate
-            print("learning rate %f" % (param_group['lr']))
+            for param_group in self.optim_G.param_groups:
+                param_group['lr'] = self.G_lrate
+            for param_group in self.optim_D.param_groups:
+                param_group['lr'] = self.D_lrate
 
-        for param_group in self.optim_D.param_groups:
-            lrate_coef = self.rampup(cur_it, rampup_it)
-            lrate_coef *= self.rampdown_linear(cur_it,
-                                               self.total_size,
-                                               rampdown_it)
-            param_group['lr'] = lrate_coef * self.D_lrate
+            print('Learning Rate, G: {}, D: {}.'.format(self.G_lrate, self.D_lrate))
 
 
 if __name__ == "__main__":

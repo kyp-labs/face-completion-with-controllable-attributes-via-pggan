@@ -196,7 +196,6 @@ class FaceGenLoss():
         pred_real = G(syn, attr_real)
 
         # L1 norm
-        # cycle_loss = F.l1_loss(pred_real, real, size_average=True)
         cycle_loss =  torch.mean(torch.abs(real - pred_real))
         return cycle_loss
 

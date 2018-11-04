@@ -267,7 +267,7 @@ class Snapshot(object):
             cur_level: progress indicator of progressive growing network
 
         """
-        formation = '%d [%dx%d](%d/%d)%.1f %s ' + \
+        formation = '%d [%dx%d](%d/%d) %.3f %s ' + \
                     '| G:%.3f, D:%.3f ' + \
                     '| G_adv:%.3f, A:%.3f, R:%.3f, F:%.3f, B:%.3f, C: %.3f' + \
                     '| D_adv:%.3f(%.3f,%.3f), A:%.3f, GP:%.3f'
@@ -276,7 +276,8 @@ class Snapshot(object):
                   cur_resol,
                   it,
                   total_it,
-                  cur_level, phase,
+                  cur_level,
+                  phase,
                   self.g_losses.g_loss,
                   self.d_losses.d_loss,
                   self.g_losses.g_adver_loss,

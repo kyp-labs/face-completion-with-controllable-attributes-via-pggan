@@ -60,7 +60,7 @@ class Config():
         self.dataset.num_channels = 3
 
         # Tranining
-        self.train = EasyDict(D_repeats=1,
+        self.train = EasyDict(D_repeats=5,
                               total_size=50000,
                               train_size=25000,
                               transition_size=25000,
@@ -72,8 +72,8 @@ class Config():
                                   fmap_base=1024,
                                   num_layers=7)
 
-        self.train.use_mask = False  # {inpainting , generation} mode
-        self.train.use_attr = True  # {inpainting , generation} mode
+        self.train.use_mask = False
+        self.train.use_attr = False
         self.train.mode = Mode.generation  # {inpainting , generation} mode
         if self.common.test_mode == TestMode.unit_test:
             self.train.forced_stop = True
@@ -127,7 +127,7 @@ class Config():
         # weight of attribute loss (paper = 2)
         self.loss.lambda_attr = 2.0
         # weight of cycle consistency loss
-        self.loss.lambda_cycle = 10.0
+        self.loss.lambda_cycle = 1.0
 
         # mean filter size for calculation of boudnary loss
         self.loss.mean_filter_size = 7
@@ -143,8 +143,6 @@ class Config():
 
         # Learning Rate
         self.optimizer.lrate = EasyDict()
-        self.optimizer.lrate.rampup_rate = 0.2
-        self.optimizer.lrate.rampdown_rate = 0.2
         self.optimizer.lrate.G_base = 0.0001  # 1e-3
         self.optimizer.lrate.D_base = 0.0001  # 1e-3
         self.optimizer.lrate.G_dict = {1024: 0.0015}
@@ -222,15 +220,15 @@ class TestConfig(Config):
         self.train.total_size = 500000
         self.train.train_size = 250000
         self.train.transition_size = 250000
-
+        
         self.sched.batch_base = 32  # Maximum batch size
         self.sched.batch_dict = {4: 64,
                                  8: 32,
-                                 16: 16,
+                                 16: 32,
                                  32: 16,
-                                 64: 4,
-                                 128: 4,
-                                 256: 2}  # Resolution-specific overrides
+                                 64: 16,
+                                 128: 8,
+                                 256: 4}  # Resolution-specific overrides
 
         self.snapshot.sample_freq_dict = {4: 256,
                                           8: 512,
@@ -266,9 +264,9 @@ class StarGANConfig(Config):
         self.loss.gan = Gan.wgan_gp
 
         self.train.D_repeats = 5
-        self.train.total_size = 64000000
-        self.train.train_size = 32000000
-        self.train.transition_size = 32000000
+        self.train.total_size = 6400000
+        self.train.train_size = 3200000
+        self.train.transition_size = 3200000
 
         self.train.net.min_resolution = 128
         self.train.net.max_resolution = 128

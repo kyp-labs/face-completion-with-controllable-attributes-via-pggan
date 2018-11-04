@@ -491,59 +491,6 @@ class FaceGenStarGAN():
                                   betas=(self.config.optimizer.D_opt.beta1,
                                   self.config.optimizer.D_opt.beta2))
 
-    def rampup(self, cur_it, rampup_it):
-        """Ramp up learning rate.
-        Args:
-            cur_it: current # of iterations in the phase
-            rampup_it: # of iterations for ramp up
-        """
-        if cur_it < rampup_it:
-            p = max(0.0, float(cur_it)) / float(rampup_it)
-            p = 1.0 - p
-            return np.exp(-p*p*5.0)
-        else:
-            return 1.0
-
-    def rampdown_linear(self, cur_it, total_it, rampdown_it):
-        """Ramp down learning rate.
-        Args:
-            cur_it: current # of iterations in the phasek
-            total_it: total # of iterations in the phase
-            rampdown_it: # of iterations for ramp down
-        """
-        if cur_it >= total_it - rampdown_it:
-            return float(total_it - cur_it) / rampdown_it
-
-        return 1.0
-
-    def update_lr_old(self, cur_it, total_it, replay_mode=False):
-        """Update learning rate.
-        Args:
-            cur_it: current # of iterations in the phasek
-            total_it: total # of iterations in the phase
-            replay_mode: memory replay mode
-        """
-        if replay_mode:
-            return
-
-        rampup_it = total_it * self.config.optimizer.lrate.rampup_rate
-        rampdown_it = total_it * self.config.optimizer.lrate.rampdown_rate
-
-        # learning rate rampup & down
-        for param_group in self.optim_G.param_groups:
-            lrate_coef = self.rampup(cur_it, rampup_it)
-            lrate_coef *= self.rampdown_linear(cur_it,
-                                               total_it,
-                                               rampdown_it)
-            param_group['lr'] = lrate_coef * self.G_lrate
-            # print("learning rate %f" % (param_group['lr']))
-
-        for param_group in self.optim_D.param_groups:
-            lrate_coef = self.rampup(cur_it, rampup_it)
-            lrate_coef *= self.rampdown_linear(cur_it,
-                                               self.total_size,
-                                               rampdown_it)
-            param_group['lr'] = lrate_coef * self.D_lrate
 
     def update_lr(self, cur_it, total_it, replay_mode=False):
         """Update learning rate.
