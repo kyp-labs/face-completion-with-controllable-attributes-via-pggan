@@ -136,7 +136,7 @@ class ToTensor(object):
 
             if elem == 'attr':
                 tmp = sample['attr']
-                sample[elem] = torch.from_numpy(tmp).float()
+                sample[elem] = torch.from_numpy(tmp).float().squeeze()
 
         return sample
 
@@ -195,11 +195,11 @@ class PolygonMask(object):
         image = sample['image']
         landmark = sample['landmark']
         gender = np.argmax(sample['attr'], axis=1)
-        fake_gender = random.randint(0, 2)
+        fake_gender = random.randint(0, 1)
 
         resolution = image.size[-1]
         landmark_adjust_ratio = 256 // resolution
-        real_mask = np.full([resolution, resolution], gender,
+        real_mask = np.full([resolution, resolution], 2,
                             dtype=np.uint8)
         obs_mask = real_mask.copy()
 
@@ -255,8 +255,8 @@ class PolygonMask(object):
         cv2.fillPoly(real_mask, polygon_coords, int(gender))
         cv2.fillPoly(obs_mask, polygon_coords, fake_gender)
 
-        sample['real_mask'] = real_mask
-        sample['obs_mask'] = obs_mask
+        sample['real_mask'] = np.expand_dims(real_mask, 0)
+        sample['obs_mask'] = np.expand_dims(obs_mask, 0)
         sample['fake_gender'] = fake_gender
         return sample
 

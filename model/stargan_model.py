@@ -28,13 +28,18 @@ class ResidualBlock(nn.Module):
 class StarGenerator(nn.Module):
     """Generator network."""
 
-    def __init__(self, conv_dim=64, c_dim=5, repeat_num=6):
+    def __init__(self, conv_dim=64, c_dim=5, repeat_num=6, use_mask=True):
         """constructor."""
         super(StarGenerator, self).__init__()
 
+        self.use_mask = use_mask
         layers = []
-        layers.append(nn.Conv2d(3+c_dim, conv_dim, kernel_size=7,
-                                stride=1, padding=3, bias=False))
+        if use_mask:
+            layers.append(nn.Conv2d(3+1+c_dim, conv_dim, kernel_size=7,
+                                    stride=1, padding=3, bias=False))
+        else:
+            layers.append(nn.Conv2d(3+c_dim, conv_dim, kernel_size=7,
+                                    stride=1, padding=3, bias=False))
         layers.append(nn.InstanceNorm2d(conv_dim, affine=True,
                                         track_running_stats=True))
         layers.append(nn.ReLU(inplace=True))
@@ -68,12 +73,15 @@ class StarGenerator(nn.Module):
         layers.append(nn.Tanh())
         self.main = nn.Sequential(*layers)
 
-    def forward(self, x, c):
+    def forward(self, x, mask=None, c=None):
         """forward."""
         # Replicate spatially and concatenate domain information.
-        c = c.view(c.size(0), c.size(1), 1, 1)
-        c = c.repeat(1, 1, x.size(2), x.size(3))
-        x = torch.cat([x, c], dim=1)
+        if c is not None:
+            c = c.view(c.size(0), c.size(1), 1, 1)
+            c = c.repeat(1, 1, x.size(2), x.size(3))
+            x = torch.cat([x, c], dim=1)
+        if mask is not None and self.use_mask:
+            x = torch.cat([x, mask], dim=1)
         return self.main(x)
 
 
