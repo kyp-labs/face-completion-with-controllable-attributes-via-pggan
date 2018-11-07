@@ -37,11 +37,18 @@ class RandomHorizontalFlip(object):
         Returns:
             PIL Image: Randomly flipped image.
         """
-        tmp = sample['image']
-        if random.random() < self.p:
-            tmp = F.hflip(tmp)
+        tmp_img = sample['image']
+        tmp_obs_mask = sample['obs_mask']
+        tmp_real_mask = sample['real_mask']
 
-        sample['image'] = tmp
+        if random.random() < self.p:
+            tmp_img = F.hflip(tmp_img)
+            tmp_obs_mask = F.hflip(tmp_obs_mask)
+            tmp_real_mask = F.hflip(tmp_real_mask)
+
+        sample['image'] = tmp_img
+        sample['obs_mask'] = tmp_obs_mask
+        sample['real_mask'] = tmp_real_mask
         return sample
 
     def __repr__(self):
@@ -129,15 +136,14 @@ class ToTensor(object):
         Returns:
             Tensor: Converted image.
         """
-        for elem in ['image', 'attr']:
-            if elem == 'image':
-                tmp = sample['image']
-                sample[elem] = F.to_tensor(tmp)
-
+        for elem in ['image', 'attr', 'real_mask', 'obs_mask']:
             if elem == 'attr':
                 tmp = sample['attr']
                 sample[elem] = torch.from_numpy(tmp).float().squeeze()
 
+            else:
+                tmp = sample[elem]
+                sample[elem] = F.to_tensor(tmp)
         return sample
 
     def __repr__(self):
@@ -255,8 +261,8 @@ class PolygonMask(object):
         cv2.fillPoly(real_mask, polygon_coords, int(gender))
         cv2.fillPoly(obs_mask, polygon_coords, fake_gender)
 
-        sample['real_mask'] = np.expand_dims(real_mask, 0)
-        sample['obs_mask'] = np.expand_dims(obs_mask, 0)
+        sample['real_mask'] = Image.fromarray(np.int8(real_mask))
+        sample['obs_mask'] = Image.fromarray(np.int8(obs_mask))
         sample['fake_gender'] = fake_gender
         return sample
 
