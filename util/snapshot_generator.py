@@ -6,6 +6,7 @@ which makes snapshots of intermediate images, checkpoints and tensorboard log
 """
 import os
 import numpy as np
+import random
 import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -29,15 +30,19 @@ class SnapshotGenerator(object):
         self.use_cuda = use_coda
         self.use_mask = self.config.train.use_mask
         self.cur_resol = 0
+        
+        self.sample_file_name = self.config.dataset.sample_path
+        if self.config.snapshot.gen_sample_from_file == False:
+            self.sample_file_name =  self.config.dataset.sample_path_temp
 
     def make_sample_file(self, batch_size):
         """Merge filtered list and save to csv."""
         ds = self.config.dataset
         filtered_list = pd.read_csv(ds.filtering_path)
         filtered_list = filtered_list[filtered_list['category'] == 'Good']
-        sample_list = filtered_list.sample(batch_size)
-        sample_list.to_csv(ds.sample_path, index=False)
-        return
+        seed = random.randint(0, filtered_list.shape[0])
+        sample_list = filtered_list.sample(batch_size, random_state = seed)       
+        sample_list.to_csv(self.sample_file_name, index=False)
   
     def load_sample_data(self, cur_resol, batch_size):
         """Load train set.
@@ -46,11 +51,10 @@ class SnapshotGenerator(object):
             resol: progress indicator of progressive growing network
             batch_size: flag for detaching syn image from generator graph
 
-        """        
-        sample_path = self.config.dataset.sample_path
-        if os.path.exists(sample_path) is False:
+        """
+        if self.config.snapshot.gen_sample_from_file == False or \
+            os.path.exists(self.sample_file_name) is False:
             self.make_sample_file(batch_size)
-            return False
 
         self.cur_resol = cur_resol
         self.batch_size = batch_size
@@ -70,7 +74,7 @@ class SnapshotGenerator(object):
                                           resolution=cur_resol,
                                           landmark_info_path=ds.landmark_path,
                                           identity_info_path=ds.identity_path,
-                                          filtered_list=ds.sample_path,
+                                          filtered_list=self.sample_file_name,
                                           transform=transform_options,
                                           func=dataset_func)
 

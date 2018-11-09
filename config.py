@@ -59,6 +59,8 @@ class Config():
             './dataset/VGGFACE2/train/all_filtered_results.csv'
         self.dataset.sample_path = \
             './dataset/VGGFACE2/train/snapshot_sample_list.csv'
+        self.dataset.sample_path_temp = \
+            './dataset/VGGFACE2/train/snapshot_sample_list_temp.csv'
         self.dataset.attibute_size = 2
         self.dataset.num_classes = 3
         self.dataset.num_channels = 3
@@ -171,6 +173,7 @@ class Config():
                                   2: 1,
                                   1: 1}  # rows per batch size
         self.snapshot.enable_threading = True
+        self.snapshot.gen_sample_from_file = False
 
         # Model Save & Restore
         self.checkpoint = EasyDict()
@@ -278,7 +281,7 @@ class StarGANConfig(Config):
         self.train.use_attr = True
         
         # weight of reconstruction loss (paper = 500)
-        self.loss.lambda_recon = 500.0
+        self.loss.lambda_recon = 200.0
         # weight of feature loss (paper = 10)
         self.loss.lambda_feat = 0
         # weight of boundary loss(paper = 5000)

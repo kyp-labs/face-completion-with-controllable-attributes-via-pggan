@@ -190,14 +190,12 @@ class Snapshot(object):
         args = (global_it, it, total_it, phase, cur_resol, cur_level,
                 minibatch_size, G, D, optim_G, optim_D)
 
-        '''
         if self.config.snapshot.enable_threading:
             t = threading.Thread(target=self.periodic_snapshot, args=args)
             t.start()
         else:
             self.periodic_snapshot(*args)
-        '''
-        self.periodic_snapshot(*args)
+
 
     def periodic_snapshot(self,
                           global_it,
