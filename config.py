@@ -51,10 +51,14 @@ class Config():
         self.dataset = EasyDict()
         self.dataset.func = 'util.datasets.VGGFace2Dataset'
         self.dataset.data_dir = './dataset/VGGFACE2/train'
-        self.dataset.landmark_path = './dataset/VGGFACE2/bb_landmark/' +\
-            'test_loose_landmark.csv'
-        self.dataset.identity_path = \
-            './dataset/VGGFACE2/test_identity_info.csv'
+        self.dataset.landmark_path = './dataset/VGGFACE2/train/' +\
+            'all_loose_landmarks_256.csv'
+        self.dataset.identity_path =\
+            './dataset/VGGFACE2/identity_info.csv'
+        self.dataset.filtering_path =\
+            './dataset/VGGFACE2/train/all_filtered_results.csv'
+        self.dataset.sample_path = \
+            './dataset/VGGFACE2/train/snapshot_sample_list.csv'
         self.dataset.attibute_size = 2
         self.dataset.num_classes = 3
         self.dataset.num_channels = 3
@@ -159,11 +163,11 @@ class Config():
                                           64: 1024,
                                           128: 1024,
                                           256: 1024}
-        self.snapshot.rows_map = {64: 8,
-                                  32: 8,
-                                  16: 4,
-                                  8: 2,
-                                  4: 2,
+        self.snapshot.rows_map = {64: 16,
+                                  32: 16,
+                                  16: 8,
+                                  8: 1,
+                                  4: 1,
                                   2: 1,
                                   1: 1}  # rows per batch size
         self.snapshot.enable_threading = True
@@ -270,11 +274,19 @@ class StarGANConfig(Config):
 
         self.train.net.min_resolution = 128
         self.train.net.max_resolution = 128
-
+        self.train.use_mask = True
+        self.train.use_attr = True
+        
+        # weight of reconstruction loss (paper = 500)
+        self.loss.lambda_recon = 500.0
+        # weight of feature loss (paper = 10)
+        self.loss.lambda_feat = 0
+        # weight of boundary loss(paper = 5000)
+        self.loss.lambda_bdy = 0.0
         # weight of attribute loss (paper = 2)
         self.loss.lambda_attr = 1.0
         # weight of cycle consistency loss
-        self.loss.lambda_cycle = 10.0
+        self.loss.lambda_cycle = 1.0
 
         self.sched.batch_base = 32  # Maximum batch size
         self.sched.batch_dict = {4: 64,

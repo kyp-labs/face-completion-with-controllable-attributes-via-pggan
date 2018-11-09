@@ -14,7 +14,7 @@ import threading
 import util.util as util
 from util.logger import Logger
 from util.util import Phase
-
+from util.snapshot_generator import SnapshotGenerator
 
 class Snapshot(object):
     """Snapshot classes.
@@ -48,6 +48,10 @@ class Snapshot(object):
         self.use_cuda = use_coda
         self.current_time = time.strftime('%Y-%m-%d %H%M%S')
         self.is_restored = False
+        self.snapshot_real = None
+        self.snapshot_ = None
+        self.snapshot_samples = None
+        self.generator = SnapshotGenerator(self.config, self.use_cuda)
 
     def restore_model(self, G, D, optim_G, optim_D):
         """Restore model from checkpoint.
@@ -135,7 +139,7 @@ class Snapshot(object):
 
         self.log_dir = os.path.join(root_log_dir, self.current_time, "")
         self.logger = Logger(self.log_dir)
-
+        
     def snapshot(self,
                  global_it,
                  it,
@@ -146,6 +150,7 @@ class Snapshot(object):
                  minibatch_size,
                  real,
                  syn,
+                 obs_mask,
                  G,
                  D,
                  optim_G,
@@ -176,6 +181,7 @@ class Snapshot(object):
         self.d_losses = d_losses
         self.real = real
         self.syn = syn
+        self.obs_mask = obs_mask
 
         # ===report ===
         self.line_summary(global_it, it, total_it, phase, cur_resol, cur_level)
@@ -184,11 +190,14 @@ class Snapshot(object):
         args = (global_it, it, total_it, phase, cur_resol, cur_level,
                 minibatch_size, G, D, optim_G, optim_D)
 
+        '''
         if self.config.snapshot.enable_threading:
             t = threading.Thread(target=self.periodic_snapshot, args=args)
             t.start()
         else:
             self.periodic_snapshot(*args)
+        '''
+        self.periodic_snapshot(*args)
 
     def periodic_snapshot(self,
                           global_it,
@@ -227,7 +236,8 @@ class Snapshot(object):
         # ===generate sample images===
         samples = []
         if (it % sample_freq == 1) or it == total_it:
-            samples = self.image_sampling(minibatch_size)
+            # samples = self.image_sampling(minibatch_size)
+            samples = self.generator.snapshot(cur_resol, G)
             filename = '%s-%dx%d-%s-%s.png' % (str(global_it).zfill(6),
                                                cur_resol,
                                                cur_resol,
@@ -302,23 +312,27 @@ class Snapshot(object):
         """
         n_row = self.config.snapshot.rows_map[minibatch_size]
         if n_row >= minibatch_size:
-            n_row = minibatch_size // 2
+            n_row = minibatch_size*3 // 4
         n_col = int(np.ceil(minibatch_size / float(n_row)))
-
+        
+        N, C, H, W = self.real.shape
+        mask = self.obs_mask.repeat((1, C, 1, 1))
+        
         # sample_idx = np.random.randint(minibatch_size, size=n_row*n_col)
         samples = []
-        i = j = 0
+        i = j = k = 0
         for _ in range(n_row):
             one_row = []
-            # syn
             for _ in range(n_col):
-                one_row.append(self.syn[i].cpu().data.numpy())
+                one_row.append(mask[k].cpu().data.numpy()) # mask
+                one_row.append(self.real[i].cpu().data.numpy()) # real
+                one_row.append(self.syn[j].cpu().data.numpy()) # syn
                 i += 1
-            # real
-            for _ in range(n_col):
-                one_row.append(self.real[j].cpu().data.numpy())
                 j += 1
+                k += 1
+                
             samples += [np.concatenate(one_row, axis=2)]
+            
         samples = np.concatenate(samples, axis=1).transpose([1, 2, 0])
 
         half = samples.shape[1] // 2

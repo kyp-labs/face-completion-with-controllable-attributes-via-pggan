@@ -24,10 +24,9 @@ from torch.utils.data import DataLoader
 
 from model.stargan_model import StarGenerator, StarDiscriminator
 import util.util as util
-from util.custom_transforms import *
+import util.custom_transforms as dt
 from util.util import Phase
 from util.util import Mode
-from util.replay import ReplayMemory
 from util.stargan_snapshot import Snapshot
 
 from stargan_loss import FaceGenLoss
@@ -51,7 +50,6 @@ class FaceGenStarGAN():
         optim_G : optimizer for generator
         optim_D : optimizer for discriminator
         loss : losses of generator and discriminator
-        replay_memory : replay memory
         global_it : global # of iterations through training
         global_cur_nimg : global # of current images through training
         snapshot : snapshot intermediate images, checkpoints, tensorboard logs
@@ -77,7 +75,6 @@ class FaceGenStarGAN():
         - Model (Generator, Discriminator)
         - Optimizer
         - Loss and loss histories
-        - Replay memory
         - Snapshot
 
         """
@@ -103,7 +100,8 @@ class FaceGenStarGAN():
         image_size = self.config.train.net.min_resolution
         self.G = StarGenerator(conv_dim=64,
                                c_dim=self.config.dataset.attibute_size,
-                               repeat_num=6)
+                               repeat_num=6,
+                               use_mask=self.use_mask)
         self.D = StarDiscriminator(image_size=image_size,
                                    conv_dim=64,
                                    c_dim=self.config.dataset.attibute_size,
@@ -117,10 +115,6 @@ class FaceGenStarGAN():
                                 self.use_cuda,
                                 self.config.env.num_gpus)
 
-        # Replay Memory
-        self.replay_memory = ReplayMemory(self.config,
-                                          self.use_cuda,
-                                          self.config.replay.enabled)
         self.global_it = 1
         self.global_cur_nimg = 1
 
@@ -128,7 +122,7 @@ class FaceGenStarGAN():
         self.snapshot = Snapshot(self.config, self.use_cuda)
         self.snapshot.prepare_logging()
         self.snapshot.restore_model(self.G, self.D, self.optim_G, self.optim_D)
-
+        
     def train(self):
         """Training for progressive growing model.
 
@@ -137,7 +131,6 @@ class FaceGenStarGAN():
             2-1. for each phases
                 1) first layer : {training}
                 2) remainder layers : {transition, traning}
-                3) optional : {replaying}
                 do train one step
 
         """
@@ -203,8 +196,7 @@ class FaceGenStarGAN():
 
             # load traninig set
             self.training_set = self.load_train_set(cur_resol, batch_size)
-            if self.config.replay.enabled:
-                self.replay_memory.reset(cur_resol)
+            self.snapshot.generator.load_sample_data(cur_resol, batch_size)
 
             # Learningn Rate
             lrate = self.config.optimizer.lrate
@@ -214,7 +206,6 @@ class FaceGenStarGAN():
                                             self.config.optimizer.lrate.D_base)
 
             # Training Set
-            replay_mode = False
 
             while cur_it <= total_it:
                 for _, sample_batched in enumerate(self.training_set):
@@ -229,7 +220,6 @@ class FaceGenStarGAN():
                         phase = Phase.training
 
                     # calculate current level (from 1)
-
                     if phase == Phase.transition:
                         # transition [pref level, current level]
                         cur_level = float(R - min_resol + float(cur_it/to_it))
@@ -240,17 +230,17 @@ class FaceGenStarGAN():
                     # get a next batch - temporary code
                     self.real = sample_batched['image']
                     self.attr_real = sample_batched['attr']
-                    self.mask = sample_batched['mask']
-                    N, H, W = self.mask.shape
-                    self.mask = self.mask.reshape((N, 1, H, W))
-
+                    
+                    self.real_mask = sample_batched['real_mask']                    
+                    self.obs_mask = sample_batched['obs_mask']
+                    fake_gender = sample_batched['fake_gender']
+                    self.attr_obs = self.generate_attr_obs(self.attr_real,
+                                                           fake_gender)
+                    
                     if self.mode == Mode.inpainting:
                         self.obs = sample_batched['masked_image']
                     else:
                         self.obs = sample_batched['image']
-
-                    self.attr_obs = self.generate_attr_obs(self.attr_real)
-                    # self.attr_obs = self.attr_real
 
                     cur_nimg = self.train_step(batch_size,
                                                cur_it,
@@ -263,29 +253,6 @@ class FaceGenStarGAN():
                     self.global_it += 1
                     self.global_cur_nimg += 1
 
-            # Replay Mode
-            if self.config.replay.enabled:
-                replay_mode = True
-                phase = Phase.replaying
-                total_it = self.config.replay.replay_count
-
-                for i_batch in range(self.config.replay.replay_count):
-                    cur_it = i_batch+1
-                    self.real, self.attr_real, self.mask,
-                    self.obs, self.attr_obs, self.syn \
-                        = self.replay_memory.get_batch(cur_resol, batch_size)
-                    if self.real is None:
-                        break
-                    self.syn = util.tofloat(self.use_cuda, self.syn)
-                    cur_nimg = self.train_step(batch_size,
-                                               cur_it,
-                                               total_it,
-                                               phase,
-                                               cur_resol,
-                                               cur_level,
-                                               cur_nimg,
-                                               replay_mode)
-
     def train_step(self,
                    batch_size,
                    cur_it,
@@ -293,8 +260,7 @@ class FaceGenStarGAN():
                    phase,
                    cur_resol,
                    cur_level,
-                   cur_nimg,
-                   replay_mode=False):
+                   cur_nimg):
         """Training one step.
 
         1. Train discrmininator for [D_repeats]
@@ -305,11 +271,10 @@ class FaceGenStarGAN():
             batch_size: batch size
             cur_it: current # of iterations in the phases of the layer
             total_it: total # of iterations in the phases of the layer
-            phase: training, transition, replaying
+            phase: training, transition
             cur_resol: image resolution of current layer
             cur_level: progress indicator of progressive growing network
             cur_nimg: current # of images in the phase
-            replay_mode: Memory replay mode
 
         Returns:
             cur_nimg: updated # of images in the phase
@@ -318,19 +283,10 @@ class FaceGenStarGAN():
         self.preprocess()
 
         # Training discriminator
-        self.update_lr(cur_it, total_it, replay_mode)
+        self.update_lr(cur_it, total_it)
         self.optim_D.zero_grad()
-        self.forward_D(cur_level, detach=True, replay_mode=replay_mode)
+        self.forward_D(cur_level, detach=True)
         self.backward_D(cur_level)
-
-        if self.config.replay.enabled and replay_mode is False:
-            self.replay_memory.append(cur_resol,
-                                      self.real,
-                                      self.attr_real,
-                                      self.mask,
-                                      self.obs,
-                                      self.attr_obs,
-                                      self.syn.detach())
 
         # Training generator
         if cur_it % self.D_repeats == 0:
@@ -349,6 +305,7 @@ class FaceGenStarGAN():
                                batch_size,
                                self.real,
                                self.syn,
+                               self.obs_mask,
                                self.G,
                                self.D,
                                self.optim_G,
@@ -368,16 +325,18 @@ class FaceGenStarGAN():
         """
         self.cls_syn, self.d_attr_obs = self.D(self.syn)
 
-    def forward_D(self, cur_level, detach=True, replay_mode=False):
+    def forward_D(self, cur_level, detach=True):
         """Forward discriminator.
 
         Args:
             cur_level: progress indicator of progressive growing network
             detach: flag whether to detach graph from generator or not
-            replay_mode: memory replay mode
-
+            
         """
-        self.syn = self.G(self.obs, self.attr_real)
+        if self.use_mask:
+            self.syn = self.G(self.obs, self.obs_mask, self.attr_obs)
+        else:
+            self.syn = self.G(self.obs, self.attr_obs)
 
         self.cls_real, self.d_attr_real = self.D(self.real)
         self.cls_syn, self.d_attr_obs = self.D(
@@ -391,7 +350,8 @@ class FaceGenStarGAN():
                               self.obs,
                               self.attr_real,
                               self.attr_obs,
-                              self.mask,
+                              self.real_mask,
+                              self.obs_mask,
                               self.syn,
                               self.cls_real,
                               self.cls_syn,
@@ -415,7 +375,8 @@ class FaceGenStarGAN():
                               self.obs,
                               self.attr_real,
                               self.attr_obs,
-                              self.mask,
+                              self.real_mask,
+                              self.obs_mask,
                               self.syn,
                               self.cls_real,
                               self.cls_syn,
@@ -429,7 +390,8 @@ class FaceGenStarGAN():
         """Set input type to cuda or cpu according to gpu availability."""
         self.real = util.tofloat(self.use_cuda, self.real)
         self.attr_real = util.tofloat(self.use_cuda, self.attr_real)
-        self.mask = util.tofloat(self.use_cuda, self.mask)
+        self.real_mask = util.tofloat(self.use_cuda, self.real_mask)
+        self.obs_mask = util.tofloat(self.use_cuda, self.obs_mask)
         self.obs = util.tofloat(self.use_cuda, self.obs)
         self.attr_obs = util.tofloat(self.use_cuda, self.attr_obs)
 
@@ -456,14 +418,15 @@ class FaceGenStarGAN():
             batch_size: flag for detaching syn image from generator graph
 
         """
-        crop_size = 178
-        image_size = 128
-        transform_options = transforms.Compose([PolygonMask(),
-                                                RandomHorizontalFlip(),
-                                                CenterCrop(crop_size),
-                                                Resize(image_size),
-                                                ToTensor(),
-                                                Normalize(mean=(0.5,0.5,0.5),
+        crop_size = resol
+        image_size = resol
+        transform_options = transforms.Compose([dt.PolygonMask(),
+                                                dt.RandomHorizontalFlip(),
+                                                dt.CenterCrop(crop_size),
+                                                dt.Resize(image_size),
+                                                dt.ToTensor(),
+                                                dt.Normalize(
+                                                    mean=(0.5,0.5,0.5),
                                                     std=(0.5,0.5,0.5))])
 
         dataset_func = self.config.dataset.func
@@ -479,7 +442,7 @@ class FaceGenStarGAN():
         # train_dataset & data loader
         return DataLoader(datasets, batch_size, True)
 
-    def generate_attr_obs(self, attr_real):
+    def generate_attr_obs_binary_var(self, attr_real):
         """Generate attributes of observed images.
 
             - change randomly chosen one attribute of 50% of real images
@@ -502,6 +465,22 @@ class FaceGenStarGAN():
 
         return attr_obs
 
+    def generate_attr_obs(self, attr_real, obs_value):
+        """Generate attributes of observed images.
+
+            - change randomly chosen one attribute of 50% of real images
+
+        Args:
+            attr_real: attributes of real images
+        """
+        N, attr_size = attr_real.shape
+        batch_index = np.arange(N)
+        attr_obs = torch.zeros_like(attr_real)
+        attr_obs[batch_index, obs_value.data.numpy()] = 1
+        
+        return attr_obs
+
+        
     def create_optimizer(self):
         """Create optimizers of generator and discriminator."""
         self.optim_G = optim.Adam(self.G.parameters(),
@@ -513,78 +492,13 @@ class FaceGenStarGAN():
                                   betas=(self.config.optimizer.D_opt.beta1,
                                   self.config.optimizer.D_opt.beta2))
 
-    def rampup(self, cur_it, rampup_it):
-        """Ramp up learning rate.
-
-        Args:
-            cur_it: current # of iterations in the phase
-            rampup_it: # of iterations for ramp up
-
-        """
-        if cur_it < rampup_it:
-            p = max(0.0, float(cur_it)) / float(rampup_it)
-            p = 1.0 - p
-            return np.exp(-p*p*5.0)
-        else:
-            return 1.0
-
-    def rampdown_linear(self, cur_it, total_it, rampdown_it):
-        """Ramp down learning rate.
-
-        Args:
-            cur_it: current # of iterations in the phasek
-            total_it: total # of iterations in the phase
-            rampdown_it: # of iterations for ramp down
-
-        """
-        if cur_it >= total_it - rampdown_it:
-            return float(total_it - cur_it) / rampdown_it
-
-        return 1.0
-
-    def update_lr_old(self, cur_it, total_it, replay_mode=False):
+    def update_lr(self, cur_it, total_it):
         """Update learning rate.
 
         Args:
             cur_it: current # of iterations in the phasek
             total_it: total # of iterations in the phase
-            replay_mode: memory replay mode
-
         """
-        if replay_mode:
-            return
-
-        rampup_it = total_it * self.config.optimizer.lrate.rampup_rate
-        rampdown_it = total_it * self.config.optimizer.lrate.rampdown_rate
-
-        # learning rate rampup & down
-        for param_group in self.optim_G.param_groups:
-            lrate_coef = self.rampup(cur_it, rampup_it)
-            lrate_coef *= self.rampdown_linear(cur_it,
-                                               total_it,
-                                               rampdown_it)
-            param_group['lr'] = lrate_coef * self.G_lrate
-            # print("learning rate %f" % (param_group['lr']))
-
-        for param_group in self.optim_D.param_groups:
-            lrate_coef = self.rampup(cur_it, rampup_it)
-            lrate_coef *= self.rampdown_linear(cur_it,
-                                               self.total_size,
-                                               rampdown_it)
-            param_group['lr'] = lrate_coef * self.D_lrate
-
-    def update_lr(self, cur_it, total_it, replay_mode=False):
-        """Update learning rate.
-
-        Args:
-            cur_it: current # of iterations in the phasek
-            total_it: total # of iterations in the phase
-            replay_mode: memory replay mode
-
-        """
-        if replay_mode:
-            return
-
         # Decay learning rates.
         num_iters_decay = total_it//2
         lr_update_step = 1000

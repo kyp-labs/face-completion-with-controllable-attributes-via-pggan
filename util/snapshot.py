@@ -143,7 +143,7 @@ class Snapshot(object):
                  phase,
                  cur_resol,
                  cur_level,
-                 minibatch_size,
+                 batch_size,
                  real,
                  syn,
                  G,
@@ -161,7 +161,7 @@ class Snapshot(object):
             phase: training, transition, replaying
             cur_resol: image resolution of current layer
             cur_level: progress indicator of progressive growing network
-            minibatch_size: minibatch size
+            batch_size: minibatch size
             real: real images
             syn: synthesized images
             G: generator
@@ -182,7 +182,7 @@ class Snapshot(object):
         self.log_loss_to_tensorboard(global_it)
 
         args = (global_it, it, total_it, phase, cur_resol, cur_level,
-                minibatch_size, G, D, optim_G, optim_D)
+                batch_size, G, D, optim_G, optim_D)
 
         if self.config.snapshot.enable_threading:
             t = threading.Thread(target=self.periodic_snapshot, args=args)
@@ -197,7 +197,7 @@ class Snapshot(object):
                           phase,
                           cur_resol,
                           cur_level,
-                          minibatch_size,
+                          batch_size,
                           G,
                           D,
                           optim_G,
@@ -211,7 +211,7 @@ class Snapshot(object):
             phase: training, transition, replaying
             cur_resol: image resolution of current layer
             cur_level: progress indicator of progressive growing network
-            minibatch_size: minibatch size
+            batch_size: minibatch size
             G: generator
             D: discriminator
             optim_G: optimizer of generator
@@ -227,7 +227,7 @@ class Snapshot(object):
         # ===generate sample images===
         samples = []
         if (it % sample_freq == 1) or it == total_it:
-            samples = self.image_sampling(minibatch_size)
+            samples = self.image_sampling(batch_size)
             filename = '%s-%dx%d-%s-%s.png' % (str(global_it).zfill(6),
                                                cur_resol,
                                                cur_resol,
@@ -294,19 +294,19 @@ class Snapshot(object):
 
         print(formation % values)
 
-    def image_sampling(self, minibatch_size):
+    def image_sampling(self, batch_size):
         """Image_sampling.
 
         Args:
-            minibatch_size: minibatch size
+            batch_size: minibatch size
 
         """
-        n_row = self.config.snapshot.rows_map[minibatch_size]
-        if n_row >= minibatch_size:
-            n_row = minibatch_size // 2
-        n_col = int(np.ceil(minibatch_size / float(n_row)))
+        n_row = self.config.snapshot.rows_map[batch_size]
+        if n_row >= batch_size:
+            n_row = batch_size // 2
+        n_col = int(np.ceil(batch_size / float(n_row)))
 
-        # sample_idx = np.random.randint(minibatch_size, size=n_row*n_col)
+        # sample_idx = np.random.randint(batch_size, size=n_row*n_col)
         samples = []
         i = j = 0
         for _ in range(n_row):
