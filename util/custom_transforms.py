@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageOps, ImageEnhance
 from torchvision.transforms import functional as F
-
+from util.snapshot_transforms import PolygonMaskBase
 
 _pil_interpolation_to_str = {
     Image.NEAREST: 'PIL.Image.NEAREST',
@@ -181,11 +181,12 @@ class CenterCrop(object):
         return self.__class__.__name__ + '(size={0})'.format(self.size)
 
 
-class PolygonMask(object):
+class PolygonMask(PolygonMaskBase):
     """Add Square mask to the sample."""
 
     def __init__(self, num_classes=1):
         """constructor."""
+        super().__init__()
         self.num_classes = num_classes
 
     def __call__(self, sample):
@@ -204,59 +205,22 @@ class PolygonMask(object):
         fake_gender = random.randint(0, 1)
 
         resolution = image.size[-1]
-        landmark_adjust_ratio = 256 // resolution
         real_mask = np.full([resolution, resolution], 2,
                             dtype=np.uint8)
         obs_mask = real_mask.copy()
-
-        polygon_coords = np.take(landmark,
-                                 [0, 1, 2, 3, 2, 3, 8, 9, 6, 7, 0, 1])
-        nose_coords = np.take(landmark, [4, 5])
-
-        polygon_coords = polygon_coords.astype(np.int32).reshape(1, -1, 2)
-        nose_coords = nose_coords.astype(np.int32).reshape(1, -1, 2)
-
-        # eye mask width
-        EYE_LEFT = 0
-        EYE_RIGHT = 1
-        eye_width = abs(polygon_coords[:, EYE_LEFT, 0]
-                        - nose_coords[:, 0, 0]).astype(np.int32)
-        polygon_coords[:, EYE_LEFT, 0] -= eye_width
-        eye_width = abs(polygon_coords[:, EYE_RIGHT, 0]
-                        - nose_coords[:, 0, 0]).astype(np.int32)
-        polygon_coords[:, EYE_RIGHT, 0] += eye_width
-
-        # eye mask height
-        eye_height = abs(polygon_coords[:, EYE_LEFT, 1]
-                         - nose_coords[:, 0, 1]).astype(np.int32)//2
-        polygon_coords[:, EYE_LEFT, 1] -= eye_height
-        eye_height = abs(polygon_coords[:, EYE_RIGHT, 1]
-                         - nose_coords[:, 0, 1]).astype(np.int32)//2
-        polygon_coords[:, EYE_RIGHT, 1] -= eye_height
-
-        # cheek mask width
-        CHEEK_LEFT = 5
-        CHEEK_RIGHT = 2
-        polygon_coords[:, CHEEK_LEFT, 0] = polygon_coords[:, EYE_LEFT, 0]
-        polygon_coords[:, CHEEK_RIGHT, 0] = polygon_coords[:, EYE_RIGHT, 0]
-
-        # cheek mask height
-        polygon_coords[:, CHEEK_LEFT, 1] = nose_coords[:, 0, 1]
-        polygon_coords[:, CHEEK_RIGHT, 1] = nose_coords[:, 0, 1]
-
-        # lip mask width
-        LIP_LEFT = 4
-        LIP_RIGHT = 3
-
-        # lip mask height
-        lip_height = abs(polygon_coords[:, LIP_LEFT, 1]
-                         - nose_coords[:, 0, 1]).astype(np.int32)//2
-        polygon_coords[:, LIP_LEFT, 1] += lip_height
-        lip_height = abs(polygon_coords[:, LIP_RIGHT, 1]
-                         - nose_coords[:, 0, 1]).astype(np.int32)//2
-        polygon_coords[:, LIP_RIGHT, 1] += lip_height
-
-        polygon_coords = polygon_coords // landmark_adjust_ratio
+        
+        polygon_type = random.randint(0, 3)
+        
+        if polygon_type == 0:
+            polygon_coords = self.make_face_mask(landmark, resolution)
+        elif polygon_type == 1:
+            polygon_coords = self.make_eye_mask(landmark, resolution)
+        elif polygon_type == 2:
+            polygon_coords = self.make_nose_mask(landmark, resolution)
+        elif polygon_type == 3:
+            polygon_coords = self.make_lip_mask(landmark, resolution)
+        else:
+            polygon_coords = self.make_face_mask(landmark, resolution)
 
         cv2.fillPoly(real_mask, polygon_coords, int(gender))
         cv2.fillPoly(obs_mask, polygon_coords, fake_gender)

@@ -111,29 +111,32 @@ class SnapshotGenerator(object):
             self.obs_attr_list = self.permute_attr(self.attr_real)
             
             self.obs_mask_list = sample_batched['obs_mask_list']
-            self.masked_real = sample_batched['masked_real']
+            self.masked_real_list = sample_batched['masked_real_list']
             
             self.obs = sample_batched['image']
             
             attr_size = self.attr_real.shape[1]
             
             batch = []
-            batch.append(self.masked_real.cpu().data.numpy()) # real
-
-            N, C, H, W = self.obs.shape
-            
-            for attr in range(attr_size):
-                self.obs_mask = self.obs_mask_list[attr]
-                # mask = self.obs_mask.repeat((1, C, 1, 1))
-                self.attr_obs = self.obs_attr_list[attr]
-                self.preprocess()
-               
-                if self.use_mask:
-                    self.syn = G(self.obs, self.obs_mask, self.attr_obs)
-                else:
-                    self.syn = G(self.obs, self.attr_obs)
+            mask_num = len(self.masked_real_list)
+            print(mask_num)
+            for i in range(mask_num):
+                batch.append(self.masked_real_list[i].cpu().data.numpy())
+    
+                N, C, H, W = self.obs.shape
                 
-                batch.append(self.syn.cpu().data.numpy()) # real
+                for attr in range(attr_size):
+                    self.obs_mask = self.obs_mask_list[i][attr]
+                    # mask = self.obs_mask.repeat((1, C, 1, 1))
+                    self.attr_obs = self.obs_attr_list[attr]
+                    self.preprocess()
+                   
+                    if self.use_mask:
+                        self.syn = G(self.obs, self.obs_mask, self.attr_obs)
+                    else:
+                        self.syn = G(self.obs, self.attr_obs)
+                    
+                    batch.append(self.syn.cpu().data.numpy()) # real
 
             batch = np.concatenate(batch, axis=3)
            
