@@ -159,7 +159,7 @@ class FaceGenLoss():
 
         alpha = torch.rand(N, 1)
         alpha = alpha.expand(N,
-                             real.nelement()/N).contiguous().view(N, C, H, W)
+                             real.nelement()//N).contiguous().view(N, C, H, W)
         alpha = util.tofloat(self.use_cuda, alpha)
 
         syn = syn.detach()

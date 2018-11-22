@@ -277,8 +277,8 @@ class Snapshot(object):
         """
         formation = '%d [%dx%d](%d/%d)%.1f %s ' + \
                     '| G:%.3f, D:%.3f ' + \
-                    '| G_adv:%.3f, A:%.3f, R:%.3f, F:%.3f, B:%.3f, C: %.3f' + \
-                    '| D_adv:%.3f(%.3f,%.3f), A:%.3f, GP:%.3f'
+                    '| G_adv:%.3f, A:%.3f, R:%.3f, F:%.3f, B:%.3f, C: %.3f, P: %.3f' + \
+                    '| D_adv:%.3f(%.3f,%.3f), A:%.3f, GP:%.3f, P: %.3f'
         values = (global_it,
                   cur_resol,
                   cur_resol,
@@ -293,11 +293,13 @@ class Snapshot(object):
                   self.g_losses.feat_loss,
                   self.g_losses.bdy_loss,
                   self.g_losses.cycle_loss,
+                  self.g_losses.pixel_loss,
                   self.d_losses.d_adver_loss,
                   self.d_losses.d_adver_loss_real,
                   self.d_losses.d_adver_loss_syn,
                   self.d_losses.d_attr_loss,
-                  self.d_losses.gradient_penalty)
+                  self.d_losses.gradient_penalty,
+                  self.d_losses.pixel_loss)
 
         print(formation % values)
 
@@ -366,9 +368,11 @@ class Snapshot(object):
                 self.g_losses.feat_loss,
                 'Generator/Boundary Loss':
                 self.g_losses.bdy_loss,
-                'Discriminator/Loss':
-                self.g_losses.bdy_loss,
                 'Generator/Cycle Consistency Loss':
+                self.g_losses.cycle_loss,
+                'Generator/Pixelwise Loss':
+                self.g_losses.pixel_loss,
+                'Discriminator/Loss':
                 self.d_losses.d_loss,
                 'Discriminator/Adversarial Loss':
                 self.d_losses.d_adver_loss,
@@ -379,8 +383,10 @@ class Snapshot(object):
                 'Discriminator/Attribute Loss':
                 self.d_losses.d_attr_loss,
                 'Discriminator/Gradient Penalty':
-                self.d_losses.gradient_penalty}
-
+                self.d_losses.gradient_penalty,
+                'Discriminator/Pixelwise Loss':
+                self.d_losses.pixel_loss}
+                
         for tag, value in info.items():
             self.logger.scalar_summary(tag, value, global_it)
 

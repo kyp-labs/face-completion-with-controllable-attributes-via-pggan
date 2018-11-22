@@ -120,12 +120,12 @@ class Config():
         # weight of syn images' loss of D
         self.loss.alpha_adver_loss_syn = 1.0
         # weight for target area of reconstruction loss (0.7)
-        self.loss.alpha_recon = 0.7
+        self.loss.alpha_recon = 0.0
         # weight of gradient panelty (ref source = 10)
         self.loss.lambda_GP = 10.0
 
         # weight of reconstruction loss (paper = 500)
-        self.loss.lambda_recon = 500.0
+        self.loss.lambda_recon = 100.0
         # weight of feature loss (paper = 10)
         self.loss.lambda_feat = 10.0
         # weight of boundary loss(paper = 5000)
@@ -134,6 +134,8 @@ class Config():
         self.loss.lambda_attr = 2.0
         # weight of cycle consistency loss
         self.loss.lambda_cycle = 1.0
+        # weight of pixelwise classification loss
+        self.loss.lambda_pixel = 1
 
         # mean filter size for calculation of boudnary loss
         self.loss.mean_filter_size = 7

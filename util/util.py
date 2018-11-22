@@ -99,6 +99,7 @@ class GeneratorLoss:
         feat_loss : feature loss
         bdy_loss : boundary loss
         cycle_loss : cycle consistency loss
+        pixel_loss : pixelwise classification loss of synthesized image
 
     """
 
@@ -112,6 +113,7 @@ class GeneratorLoss:
         self.feat_loss = 0
         self.bdy_loss = 0
         self.cycle_loss = 0
+        self.pixel_loss = 0
 
 
 class DiscriminatorLoss:
@@ -124,6 +126,7 @@ class DiscriminatorLoss:
         d_adver_loss_real : adversarial loss of real image (real)
         att_loss : attribute loss
         gradient_penalty_loss : gradient penalty of WGAN GP
+        pixel_loss : pixelwise classification loss of real image
 
     """
 
@@ -135,7 +138,7 @@ class DiscriminatorLoss:
         self.d_adver_loss_real = 0
         self.d_attr_loss = 0
         self.gradient_penalty_loss = 0
-
+        self.pixel_loss = 0
 # ----------------------------------------------------------------------------
 # Utilities for Tensor and Other Types
 def tofloat(use_cuda, var):

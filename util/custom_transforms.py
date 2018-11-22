@@ -227,6 +227,7 @@ class PolygonMask(PolygonMaskBase):
 
         sample['real_mask'] = Image.fromarray(np.int8(real_mask))
         sample['obs_mask'] = Image.fromarray(np.int8(obs_mask))
+        sample['gender'] = int(gender)
         sample['fake_gender'] = fake_gender
         return sample
 

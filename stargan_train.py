@@ -234,6 +234,10 @@ class FaceGenStarGAN():
                     self.real_mask = sample_batched['real_mask']                    
                     self.obs_mask = sample_batched['obs_mask']
                     fake_gender = sample_batched['fake_gender']
+                    
+                    self.source_domain = sample_batched['gender']
+                    self.target_domain = sample_batched['fake_gender']
+
                     self.attr_obs = self.generate_attr_obs(self.attr_real,
                                                            fake_gender)
                     
@@ -323,7 +327,7 @@ class FaceGenStarGAN():
             cur_level: progress indicator of progressive growing network
 
         """
-        self.cls_syn, self.d_attr_obs = self.D(self.syn)
+        self.cls_syn, self.d_attr_obs, self.pixel_cls_syn = self.D(self.syn)
 
     def forward_D(self, cur_level, detach=True):
         """Forward discriminator.
@@ -338,9 +342,9 @@ class FaceGenStarGAN():
         else:
             self.syn = self.G(self.obs, self.attr_obs)
 
-        self.cls_real, self.d_attr_real = self.D(self.real)
-        self.cls_syn, self.d_attr_obs = self.D(
-                self.syn.detach() if detach else self.syn)
+        self.cls_real, self.d_attr_real, self.pixel_cls_real = \
+            self.D(self.real)
+        self.cls_syn, _, _ = self.D(self.syn.detach() if detach else self.syn)
 
     def backward_G(self, cur_level):
         """Backward generator."""
@@ -352,12 +356,14 @@ class FaceGenStarGAN():
                               self.attr_obs,
                               self.real_mask,
                               self.obs_mask,
+                              self.target_domain,
                               self.syn,
                               self.cls_real,
                               self.cls_syn,
-                              self.d_attr_real,
                               self.d_attr_obs,
-                              self.use_mask)
+                              self.use_mask,
+                              self.pixel_cls_syn)
+        
         self.loss.g_losses.g_loss.backward()
         self.optim_G.step()
 
@@ -377,11 +383,12 @@ class FaceGenStarGAN():
                               self.attr_obs,
                               self.real_mask,
                               self.obs_mask,
+                              self.source_domain,
                               self.syn,
                               self.cls_real,
                               self.cls_syn,
                               self.d_attr_real,
-                              self.d_attr_obs)
+                              self.pixel_cls_real)
 
         self.loss.d_losses.d_loss.backward(retain_graph=retain_graph)
         self.optim_D.step()
@@ -394,6 +401,8 @@ class FaceGenStarGAN():
         self.obs_mask = util.tofloat(self.use_cuda, self.obs_mask)
         self.obs = util.tofloat(self.use_cuda, self.obs)
         self.attr_obs = util.tofloat(self.use_cuda, self.attr_obs)
+        self.source_domain = util.tofloat(self.use_cuda, self.source_domain)
+        self.target_domain = util.tofloat(self.use_cuda, self.target_domain)
 
     def check_gpu(self):
         """Check gpu availability."""
