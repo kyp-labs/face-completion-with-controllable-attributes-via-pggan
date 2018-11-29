@@ -279,6 +279,9 @@ class FaceGenLoss():
         Return:
             loss (scalar) : cross entropy loss
         """
+        
+        if self.config.loss.use_pixel_loss == False: return 0
+        
         N, C, H, W = target.shape
 
         # target area of domain mask

@@ -42,7 +42,7 @@ class Snapshot(object):
 
     """
 
-    def __init__(self, config, use_coda):
+    def __init__(self, config, use_coda, self_augmenter):
         """Class initializer."""
         self.config = config
         self.use_cuda = use_coda
@@ -51,7 +51,10 @@ class Snapshot(object):
         self.snapshot_real = None
         self.snapshot_ = None
         self.snapshot_samples = None
-        self.generator = SnapshotGenerator(self.config, self.use_cuda)
+        self.self_augmenter = self_augmenter
+        self.generator = SnapshotGenerator(self.config,
+                                           self.use_cuda,
+                                           self.self_augmenter)
 
     def restore_model(self, G, D, optim_G, optim_D):
         """Restore model from checkpoint.

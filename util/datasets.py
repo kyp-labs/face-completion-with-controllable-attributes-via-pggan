@@ -99,7 +99,7 @@ class VGGFace2Dataset(Dataset):
 
     def __init__(self, data_dir, resolution, landmark_info_path,
                  identity_info_path, filtered_list, use_low_res=False,
-                 transform=None):
+                 transform=None, attribute_size=2):
         """Constructor.
 
         Args:
@@ -137,8 +137,14 @@ class VGGFace2Dataset(Dataset):
         identity_info = pd.read_csv(identity_info_path)
         identity_info = identity_info[identity_info['Class_ID']
                                       .str.contains('|'.join(dir_list))]
+        
+        female_onehot = np.zeros((attribute_size))
+        female_onehot[0] = 1
+        male_onehot = np.zeros((attribute_size))
+        male_onehot[1] = 1
+        
         identity_info[' Gender'] = identity_info[' Gender'].apply(
-            lambda x: [0, 1] if x == ' f' else [1, 0])
+            lambda x: male_onehot if x == ' f' else female_onehot)
 
         self.landmark_info = landmark_info
         self.identity_info = identity_info

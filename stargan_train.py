@@ -28,6 +28,7 @@ import util.custom_transforms as dt
 from util.util import Phase
 from util.util import Mode
 from util.stargan_snapshot import Snapshot
+from util.self_augmenter import SelfAugmenter
 
 from stargan_loss import FaceGenLoss
 
@@ -91,6 +92,14 @@ class FaceGenStarGAN():
 
         # GPU
         self.check_gpu()
+        
+        # self augmentation
+        self.augmented_train = self.config.augment.train
+        self.augmented_train_iter = self.config.augment.iter
+        self.mask_type_list = self.config.augment.mask_type_list
+        
+        self.self_augmenter = SelfAugmenter(self.config, self.use_cuda)
+        self.augmented_domain = self.self_augmenter.augmented_domain
 
         self.mode = self.config.train.mode
         self.use_mask = self.config.train.use_mask
@@ -98,13 +107,19 @@ class FaceGenStarGAN():
 
         # Generator & Discriminator Creation
         image_size = self.config.train.net.min_resolution
+        self.attribute_size = self.config.dataset.attibute_size
+        self.num_augmented_domain = self.attribute_size
+        if self.augmented_train:
+            self.num_augmented_domain = \
+                self.self_augmenter.num_augmented_domain
+            
         self.G = StarGenerator(conv_dim=64,
-                               c_dim=self.config.dataset.attibute_size,
+                               c_dim=self.num_augmented_domain,
                                repeat_num=6,
-                               use_mask=self.use_mask)
+                               use_mask=False)
         self.D = StarDiscriminator(image_size=image_size,
                                    conv_dim=64,
-                                   c_dim=self.config.dataset.attibute_size,
+                                   c_dim=self.num_augmented_domain,
                                    repeat_num=6)
 
         self.register_on_gpu()
@@ -119,7 +134,9 @@ class FaceGenStarGAN():
         self.global_cur_nimg = 1
 
         # restore
-        self.snapshot = Snapshot(self.config, self.use_cuda)
+        self.snapshot = Snapshot(self.config,
+                                 self.use_cuda,
+                                 self.self_augmenter)
         self.snapshot.prepare_logging()
         self.snapshot.restore_model(self.G, self.D, self.optim_G, self.optim_D)
         
@@ -233,13 +250,13 @@ class FaceGenStarGAN():
                     
                     self.real_mask = sample_batched['real_mask']                    
                     self.obs_mask = sample_batched['obs_mask']
-                    fake_gender = sample_batched['fake_gender']
                     
-                    self.source_domain = sample_batched['gender']
-                    self.target_domain = sample_batched['fake_gender']
+                    self.source_domain = sample_batched['source_domain']
+                    self.target_domain = sample_batched['target_domain']
 
-                    self.attr_obs = self.generate_attr_obs(self.attr_real,
-                                                           fake_gender)
+                    self.attr_obs = sample_batched['attr_obs']
+                    # self.attr_obs = self.generate_attr_obs(self.attr_real,
+                    #                                       self.target_domain)
                     
                     if self.mode == Mode.inpainting:
                         self.obs = sample_batched['masked_image']
@@ -253,10 +270,64 @@ class FaceGenStarGAN():
                                                cur_resol,
                                                cur_level,
                                                cur_nimg)
+                    
+                    ## self augmentation training step
+                    if self.augmented_train \
+                        and self.global_it >= self.augmented_train_iter:
+                        self.backup_batch()
+                        num_mask = len(self.mask_type_list)
+                        for mask_type in range(1, num_mask):
+                            self.restore_batch()
+                            
+                            mask_str = self.mask_type_list[mask_type]
+                            obs_mask_name = 'obs_' + mask_str + '_mask'
+                            self.obs_mask = sample_batched[obs_mask_name]
+
+                            self.self_augmenter.augment(self.real,
+                                                        self.obs,
+                                                        self.syn,
+                                                        self.attr_real,
+                                                        self.attr_obs,
+                                                        self.real_mask,
+                                                        self.obs_mask,
+                                                        mask_type,
+                                                        self.source_domain,
+                                                        self.target_domain)
+                            
+                            cur_nimg = self.train_step(batch_size,
+                                                       cur_it,
+                                                       total_it,
+                                                       phase,
+                                                       cur_resol,
+                                                       cur_level,
+                                                       cur_nimg)
+                            
                     cur_it += 1
                     self.global_it += 1
-                    self.global_cur_nimg += 1
-
+                    self.global_cur_nimg += batch_size
+                    
+    def backup_batch(self):                    
+        self.temp_real = self.real
+        self.temp_obs = self.obs
+        self.temp_syn = self.syn
+        self.temp_attr_real = self.attr_real
+        self.temp_attr_obs = self.attr_obs
+        self.temp_real_mask = self.real_mask
+        self.temp_obs_mask = self.obs_mask
+        self.temp_source_domain = self.source_domain
+        self.temp_target_domain = self.target_domain
+        
+    def restore_batch(self):
+        self.real = self.temp_real
+        self.obs = self.temp_obs
+        self.syn = self.temp_syn
+        self.attr_real = self.temp_attr_real
+        self.attr_obs = self.temp_attr_obs
+        self.real_mask = self.temp_real_mask
+        self.obs_mask = self.temp_obs_mask
+        self.source_domain = self.temp_source_domain
+        self.target_domain = self.temp_target_domain
+        
     def train_step(self,
                    batch_size,
                    cur_it,
@@ -319,7 +390,7 @@ class FaceGenStarGAN():
         cur_nimg += batch_size
 
         return cur_nimg
-
+                    
     def forward_G(self, cur_level):
         """Forward generator.
 
@@ -429,11 +500,17 @@ class FaceGenStarGAN():
         """
         crop_size = resol
         image_size = resol
-        transform_options = transforms.Compose([dt.PolygonMask(),
-                                                dt.RandomHorizontalFlip(),
+        augmented_domain = util.tensor2numpy(self.use_cuda,
+                                             self.augmented_domain).astype(int)
+        transform_options = transforms.Compose([dt.RandomHorizontalFlip(),
+                                                dt.PolygonMaskSet(
+                                                    self.attribute_size,
+                                                    augmented_domain,
+                                                    self.mask_type_list),
                                                 dt.CenterCrop(crop_size),
                                                 dt.Resize(image_size),
-                                                dt.ToTensor(),
+                                                dt.ToTensorExt(
+                                                    self.mask_type_list),
                                                 dt.Normalize(
                                                     mean=(0.5,0.5,0.5),
                                                     std=(0.5,0.5,0.5))])
@@ -446,7 +523,9 @@ class FaceGenStarGAN():
                                           identity_info_path=ds.identity_path,
                                           filtered_list=ds.filtering_path,
                                           transform=transform_options,
-                                          func=dataset_func)
+                                          func=dataset_func,
+                                          attribute_size=\
+                                              self.num_augmented_domain)
 
         # train_dataset & data loader
         return DataLoader(datasets, batch_size, True)

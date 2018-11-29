@@ -86,7 +86,12 @@ class Config():
         else:
             self.train.forced_stop = False
         self.train.forced_stop_resolution = 4  # {inpainting , generation} mode
-
+        
+        self.augment = EasyDict()
+        self.augment.train = True
+        self.augment.iter = 10000
+        self.augment.mask_type_list = ['face', 'eye', 'nose', 'lip']
+        
         # Training Scheduler
         self.sched = EasyDict()
         self.sched.batch_base = 32  # Maximum batch size
@@ -114,6 +119,7 @@ class Config():
         # Loss
         self.loss = EasyDict()
         self.loss.use_feat_loss = False
+        self.loss.use_pixel_loss = False
 
         # type of gan {ga, lsgan, wgan gp, sngan}
         self.loss.gan = Gan.sngan
@@ -264,10 +270,10 @@ class StarGANConfig(Config):
             './dataset/VGGFACE2/identity_info.csv'
         self.dataset.filtering_path =\
             './dataset/VGGFACE2/train/all_filtered_results.csv'
-        self.dataset.attibute_size = 2
+        self.dataset.attibute_size = 2 # number of domain
         self.dataset.num_classes = 3
         self.dataset.num_channels = 3
-        
+
         self.env.num_gpus = 2
         
         self.loss.gan = Gan.wgan_gp
@@ -281,6 +287,11 @@ class StarGANConfig(Config):
         self.train.net.max_resolution = 128
         self.train.use_mask = True
         self.train.use_attr = True
+        
+        # augmented train and domain
+        self.augment.train = True
+        self.augment.iter = 5000
+        self.augment.mask_type_list = ['face', 'eye']
         
         # weight of reconstruction loss (paper = 500)
         self.loss.lambda_recon = 200.0
@@ -299,18 +310,21 @@ class StarGANConfig(Config):
                                  16: 16,
                                  32: 16,
                                  64: 16,
-                                 128: 16,
+                                 128: 8,
                                  256: 8}
 
-        self.snapshot.sample_freq_dict = {4: 256,
-                                          8: 512,
-                                          16: 512,
-                                          32: 512,
-                                          64: 512,
-                                          128: 512,
-                                          256: 512}
+        self.snapshot.sample_freq_dict = {4: 250,
+                                          8: 500,
+                                          16: 500,
+                                          32: 500,
+                                          64: 500,
+                                          128: 500,
+                                          256: 500}
 
         self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
+        self.checkpoint.restore_dir = './exp/2018-11-26 182818'
+        self.checkpoint.which_file = \
+             '005000-128x128-Phase.training-005001.pth'
 
 
 class ProductionConfig(Config):

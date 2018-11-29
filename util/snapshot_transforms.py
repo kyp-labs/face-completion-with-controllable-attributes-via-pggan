@@ -232,12 +232,15 @@ class PolygonMaskBase(object):
      
 class PermutePolygonMask(PolygonMaskBase):
     """Add Square mask to the sample."""
-
-    def __init__(self, num_classes=1):
+           
+    def __init__(self, attribute_size, augmented_domain, mask_type_list):
         """constructor."""
         super().__init__()
-        self.num_classes = num_classes
-
+        self.augmented_domain = augmented_domain
+        self.attribute_size = attribute_size
+        self.mask_type_list = mask_type_list
+        self.num_mask = len(self.mask_type_list)
+        
     def __call__(self, sample):
         """caller.
 
@@ -250,14 +253,18 @@ class PermutePolygonMask(PolygonMaskBase):
         """
         image = sample['image']
         landmark = sample['landmark']
+        source_domain = int(np.argmax(sample['attr'], axis=1))
+
+        target_domain_set = self.get_target_domain(source_domain)
         
         # calc polygon
         resolution = image.size[-1]
         polygon1 = self.make_face_mask(landmark, resolution)
-        polygon2 = self.make_eye_mask(landmark, resolution)
-        polygon3 = self.make_nose_mask(landmark, resolution)
-        polygon4 = self.make_lip_mask(landmark, resolution)
-        polygon_list = [polygon1, polygon2, polygon3, polygon4]
+        # polygon2 = self.make_eye_mask(landmark, resolution)
+        # polygon3 = self.make_nose_mask(landmark, resolution)
+        # polygon4 = self.make_lip_mask(landmark, resolution)
+        # polygon_list = [polygon1, polygon2, polygon3, polygon4]
+        polygon_list = [polygon1]
         
         obs_mask_list = []
         masked_real_list = []
@@ -278,20 +285,125 @@ class PermutePolygonMask(PolygonMaskBase):
           
             # make obs mask list
             sub_obs_mask_list = []
-            for attr in range(sample['attr'].shape[1]):
+            for target_domain in target_domain_set:
                 obs_mask = real_mask.copy()
-                cv2.fillPoly(obs_mask, polygon, int(attr))
+                cv2.fillPoly(obs_mask, polygon, int(target_domain))
                 sub_obs_mask_list.append(Image.fromarray(np.int8(obs_mask)))
                 
             obs_mask_list.append(sub_obs_mask_list)
-            
+
         sample['masked_real_list'] = masked_real_list
         sample['obs_mask_list'] = obs_mask_list
+        sample['source_domain'] = source_domain
+        sample['target_domain_list'] = target_domain_set
         return sample
+
+    def get_target_domain(self, source_domain):
+        """Make agumented domain one hot vector
+
+        Args:
+            source_domain (tensor) : [batch_size]
+                                     source domain id
+        """
+        target_domain = self.augmented_domain[source_domain]
+        target_domain = target_domain.flatten()
+        target_domain = [x for x in target_domain if x != source_domain]
+        target_domain.append(source_domain)
+        return target_domain
 
     def __repr__(self):  # noqa: D105
         return f'PolygonMask:(num_classes={str(self.num_classes)})'
+  
+class PermuteDomainPolygonMask(PolygonMaskBase):
+    """Add Square mask to the sample."""
+           
+    def __init__(self,
+                 attribute_size,
+                 augmented_domain,
+                 domain_lookup,
+                 mask_type_list):
+        """constructor."""
+        super().__init__()
+        self.augmented_domain = augmented_domain
+        self.domain_lookup = domain_lookup
+        self.attribute_size = attribute_size
+        self.mask_type_list = mask_type_list
+        self.num_mask = len(self.mask_type_list)
         
+    def __call__(self, sample):
+        """caller.
+
+        Args:
+            sample (dict): {str: array} formatted data for training.
+
+        Returns:
+            sample (dict): {str: array} formatted data for training.
+
+        """
+        image = sample['image']
+        landmark = sample['landmark']
+        source_domain = int(np.argmax(sample['attr'], axis=1))
+
+        target_domain_set = self.get_target_domain(source_domain)
+        
+        # calc polygon
+        resolution = image.size[-1]
+        polygon1 = self.make_face_mask(landmark, resolution)
+        polygon2 = self.make_eye_mask(landmark, resolution)
+        polygon3 = self.make_nose_mask(landmark, resolution)
+        polygon4 = self.make_lip_mask(landmark, resolution)
+        polygon_list = [polygon1, polygon2, polygon3, polygon4]
+        
+        obs_mask_list = []
+        masked_real_list = []
+        real_mask = np.full([resolution, resolution], 2, dtype=np.uint8)
+
+          
+        # make obs mask list
+        for target_domain in target_domain_set:
+            mask_type = self.domain_lookup[target_domain, 2]
+
+            polygon = polygon_list[mask_type]
+            # draw polygon on the real image
+            masked_real = np.asarray(sample['image'].copy())
+            
+            thickness = 2
+            cyan = (255, 255, 0)
+            masked_real = cv2.polylines(masked_real,
+                                    polygon,
+                                    True,
+                                    cyan,
+                                    thickness)
+            
+            masked_real_list.append(Image.fromarray(masked_real))
+            
+            # draw polygon on the obs image
+            obs_mask = real_mask.copy()
+            cv2.fillPoly(obs_mask, polygon, int(target_domain))
+            obs_mask_list.append(Image.fromarray(np.int8(obs_mask)))
+
+        sample['masked_real_list'] = masked_real_list
+        sample['obs_mask_list'] = obs_mask_list
+        sample['source_domain'] = source_domain
+        sample['target_domain_list'] = target_domain_set
+        return sample
+
+    def get_target_domain(self, source_domain):
+        """Make agumented domain one hot vector
+
+        Args:
+            source_domain (tensor) : [batch_size]
+                                     source domain id
+        """
+        target_domain = self.augmented_domain[source_domain]
+        target_domain = target_domain.flatten()
+        target_domain = [x for x in target_domain if x != source_domain]
+        target_domain.append(source_domain)
+        return target_domain
+
+    def __repr__(self):  # noqa: D105
+        return f'PolygonMask:(num_classes={str(self.num_classes)})'
+    
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
     Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels, this transform
@@ -354,6 +466,45 @@ class ToTensor(object):
                     for obs_mask in sub_obs_mask_list:
                         sub_list.append(F.to_tensor(obs_mask))
                     obs_mask_list.append(sub_list)
+                sample[elem] = obs_mask_list
+            elif elem == 'masked_real_list':
+                masked_real_list = []
+                for masked_real in sample['masked_real_list']:
+                    masked_real_list.append(F.to_tensor(masked_real))
+                sample[elem] = masked_real_list
+            else:
+                tmp = sample[elem]
+                sample[elem] = F.to_tensor(tmp)
+        return sample
+
+    def __repr__(self):
+        return self.__class__.__name__ + '()'
+    
+class ToTensor2(object):
+    """Convert a ``PIL Image`` or ``numpy.ndarray`` to tensor.
+
+    Converts a PIL Image or numpy.ndarray (H x W x C) in the range
+    [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0].
+    """
+
+    def __call__(self, sample):
+        """
+        Args:
+            pic (PIL Image or numpy.ndarray): Image to be converted to tensor.
+
+        Returns:
+            Tensor: Converted image.
+        """
+        for elem in ['image', 'attr', 'masked_real_list', 'obs_mask_list']:
+            if elem == 'attr':
+                tmp = sample['attr']
+                sample[elem] = torch.from_numpy(tmp).float().squeeze()
+
+            elif elem == 'obs_mask_list':
+                tmp = sample['attr']
+                obs_mask_list = []
+                for obs_mask in sample['obs_mask_list']:
+                    obs_mask_list.append(F.to_tensor(obs_mask))
                 sample[elem] = obs_mask_list
             elif elem == 'masked_real_list':
                 masked_real_list = []
