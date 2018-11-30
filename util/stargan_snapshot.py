@@ -90,6 +90,7 @@ class Snapshot(object):
         self.time = tmp[-1]
 
         self.sample_dir = os.path.join(restore_dir, 'samples')
+        self.selfaugment_dir = os.path.join(restore_dir, 'selfaugment')
         self.ckpt_dir = os.path.join(restore_dir, 'ckpts')
         assert os.path.exists(self.sample_dir) \
             and os.path.exists(self.ckpt_dir)
@@ -129,6 +130,8 @@ class Snapshot(object):
         self.exp_dir = self.config.snapshot.exp_dir
         self.sample_dir = \
             os.path.join(self.exp_dir, self.current_time, 'samples')
+        self.selfaugment_dir = \
+            os.path.join(self.exp_dir, self.current_time, 'selfaugment')
         self.ckpt_dir = os.path.join(self.exp_dir, self.current_time, 'ckpts')
 
         os.makedirs(self.sample_dir)
@@ -150,8 +153,8 @@ class Snapshot(object):
                  phase,
                  cur_resol,
                  cur_level,
-                 minibatch_size,
-                 real,
+                 batch_size,
+                 obs,
                  syn,
                  obs_mask,
                  G,
@@ -169,9 +172,10 @@ class Snapshot(object):
             phase: training, transition, replaying
             cur_resol: image resolution of current layer
             cur_level: progress indicator of progressive growing network
-            minibatch_size: minibatch size
-            real: real images
+            batch_size: minibatch size
+            obs: observed images
             syn: synthesized images
+            obs_mask : observed image mask
             G: generator
             D: discriminator
             optim_G: optimizer of generator
@@ -182,7 +186,7 @@ class Snapshot(object):
         """
         self.g_losses = g_losses
         self.d_losses = d_losses
-        self.real = real
+        self.obs = obs
         self.syn = syn
         self.obs_mask = obs_mask
 
@@ -191,7 +195,7 @@ class Snapshot(object):
         self.log_loss_to_tensorboard(global_it)
 
         args = (global_it, it, total_it, phase, cur_resol, cur_level,
-                minibatch_size, G, D, optim_G, optim_D)
+                batch_size, G, D, optim_G, optim_D)
 
         if self.config.snapshot.enable_threading:
             t = threading.Thread(target=self.periodic_snapshot, args=args)
@@ -207,7 +211,7 @@ class Snapshot(object):
                           phase,
                           cur_resol,
                           cur_level,
-                          minibatch_size,
+                          batch_size,
                           G,
                           D,
                           optim_G,
@@ -221,7 +225,7 @@ class Snapshot(object):
             phase: training, transition, replaying
             cur_resol: image resolution of current layer
             cur_level: progress indicator of progressive growing network
-            minibatch_size: minibatch size
+            batch_size: minibatch size
             G: generator
             D: discriminator
             optim_G: optimizer of generator
@@ -237,7 +241,7 @@ class Snapshot(object):
         # ===generate sample images===
         samples = []
         if (it % sample_freq == 1) or it == total_it:
-            # samples = self.image_sampling(minibatch_size)
+            # samples = self.image_sampling(batch_size)
             samples = self.generator.snapshot(cur_resol, G)
             filename = '%s-%dx%d-%s-%s.png' % (str(global_it).zfill(6),
                                                cur_resol,
@@ -259,6 +263,7 @@ class Snapshot(object):
                                                str(it).zfill(6))
             self.save_model(os.path.join(self.ckpt_dir, filename),
                             G, D, optim_G, optim_D)
+
 
     def line_summary(self,
                      global_it,
@@ -306,29 +311,29 @@ class Snapshot(object):
 
         print(formation % values)
 
-    def image_sampling(self, minibatch_size):
+    def image_sampling(self, batch_size):
         """Image_sampling.
 
         Args:
-            minibatch_size: minibatch size
+            batch_size: minibatch size
 
         """
-        n_row = self.config.snapshot.rows_map[minibatch_size]
-        if n_row >= minibatch_size:
-            n_row = minibatch_size*3 // 4
-        n_col = int(np.ceil(minibatch_size / float(n_row)))
+        n_row = self.config.snapshot.rows_map[batch_size]
+        if n_row >= batch_size:
+            n_row = batch_size*3 // 4
+        n_col = int(np.ceil(batch_size / float(n_row)))
         
-        N, C, H, W = self.real.shape
+        N, C, H, W = self.obs.shape
         mask = self.obs_mask.repeat((1, C, 1, 1))
         
-        # sample_idx = np.random.randint(minibatch_size, size=n_row*n_col)
+        # sample_idx = np.random.randint(batch_size, size=n_row*n_col)
         samples = []
         i = j = k = 0
         for _ in range(n_row):
             one_row = []
             for _ in range(n_col):
                 one_row.append(mask[k].cpu().data.numpy()) # mask
-                one_row.append(self.real[i].cpu().data.numpy()) # real
+                one_row.append(self.obs[i].cpu().data.numpy()) # real
                 one_row.append(self.syn[j].cpu().data.numpy()) # syn
                 i += 1
                 j += 1
@@ -350,7 +355,90 @@ class Snapshot(object):
 
         return samples
 
+    def snapshot_augmented_image(self,
+                                 global_it,
+                                 it,
+                                 total_it,
+                                 phase,
+                                 cur_resol,
+                                 batch_size,
+                                 obs,
+                                 syn,
+                                 real,
+                                 obs_mask):
+        """Snapshot.
 
+        Args:
+            global_it : global # of iterations through training
+            it: current # of iterations in the phases of the layer
+            total_it: total # of iterations in the phases of the layer
+            phase: training, transition, replaying
+            cur_resol: image resolution of current layer
+            batch_size: minibatch size
+            obs: observed images
+            syn: synthesized images
+            real : real images
+            obs_mask : observed image mask
+
+        """
+        self.obs = obs
+        self.syn = syn
+        self.real = real
+        self.obs_mask = obs_mask
+        
+        sample_freq_dict = self.config.snapshot.sample_freq_dict
+        sample_freq = sample_freq_dict.get(cur_resol,
+                                           self.config.snapshot.sample_freq)
+        # ===generate sample images===
+        samples = []
+        if (it % sample_freq == 1) or it == total_it:
+            samples = self.selfaugment_sampling(batch_size)
+            filename = '%s-%dx%d-%s-%s.png' % (str(global_it).zfill(6),
+                                               cur_resol,
+                                               cur_resol,
+                                               str(it).zfill(6),
+                                               phase)
+            imsave(os.path.join(self.self.selfaugment_dir, filename), samples)
+
+    def selfaugment_sampling(self, batch_size):
+        """Image_sampling.
+
+        Args:
+            batch_size: minibatch size
+
+        """
+        n_row = self.config.snapshot.rows_map[batch_size]
+        if n_row >= batch_size:
+            n_row = batch_size*3 // 4
+        n_col = int(np.ceil(batch_size / float(n_row)))
+        
+        N, C, H, W = self.obs.shape
+        mask = self.obs_mask.repeat((1, C, 1, 1))
+        
+        # sample_idx = np.random.randint(batch_size, size=n_row*n_col)
+        samples = []
+        i = j = k = 0
+        for _ in range(n_row):
+            one_row = []
+            for _ in range(n_col):
+                one_row.append(mask[k].cpu().data.numpy()) # mask
+                one_row.append(self.obs[i].cpu().data.numpy()) # real
+                one_row.append(self.syn[j].cpu().data.numpy()) # syn
+                one_row.append(self.real[j].cpu().data.numpy()) # syn
+                i += 1
+                j += 1
+                k += 1
+                
+            samples += [np.concatenate(one_row, axis=2)]
+            
+        samples = np.concatenate(samples, axis=1).transpose([1, 2, 0])
+
+        for type_idx in range(4):
+            samples[:, type_idx, :] -= np.min(samples[:, type_idx, :])
+            samples[:, type_idx, :] /= np.max(samples[:, type_idx, :])
+            
+        return samples
+    
     def log_loss_to_tensorboard(self, global_it):
         """Tensorboard.
 

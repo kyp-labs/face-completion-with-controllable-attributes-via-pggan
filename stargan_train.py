@@ -271,41 +271,82 @@ class FaceGenStarGAN():
                                                cur_level,
                                                cur_nimg)
                     
-                    ## self augmentation training step
+                    # self augmentation training step
                     if self.augmented_train \
                         and self.global_it >= self.augmented_train_iter:
-                        self.backup_batch()
-                        num_mask = len(self.mask_type_list)
-                        for mask_type in range(1, num_mask):
-                            self.restore_batch()
-                            
-                            mask_str = self.mask_type_list[mask_type]
-                            obs_mask_name = 'obs_' + mask_str + '_mask'
-                            self.obs_mask = sample_batched[obs_mask_name]
-
-                            self.self_augmenter.augment(self.real,
-                                                        self.obs,
-                                                        self.syn,
-                                                        self.attr_real,
-                                                        self.attr_obs,
-                                                        self.real_mask,
-                                                        self.obs_mask,
-                                                        mask_type,
-                                                        self.source_domain,
-                                                        self.target_domain)
-                            
-                            cur_nimg = self.train_step(batch_size,
-                                                       cur_it,
-                                                       total_it,
-                                                       phase,
-                                                       cur_resol,
-                                                       cur_level,
-                                                       cur_nimg)
-                            
+                        cur_nimg = self.selfaugment_train_step(sample_batched,
+                                                               batch_size,
+                                                               cur_it,
+                                                               total_it,
+                                                               phase,
+                                                               cur_resol,
+                                                               cur_level,
+                                                               cur_nimg)
                     cur_it += 1
                     self.global_it += 1
                     self.global_cur_nimg += batch_size
-                    
+
+    def selfaugment_train_step(self,
+                   sample_batched,
+                   batch_size,
+                   cur_it,
+                   total_it,
+                   phase,
+                   cur_resol,
+                   cur_level,
+                   cur_nimg):
+        """self augmentation training step.
+        Args:
+            batch_size: batch size
+            cur_it: current # of iterations in the phases of the layer
+            total_it: total # of iterations in the phases of the layer
+            phase: training, transition
+            cur_resol: image resolution of current layer
+            cur_level: progress indicator of progressive growing network
+            cur_nimg: current # of images in the phase
+            
+        """                    
+        self.backup_batch()
+        num_mask = len(self.mask_type_list)
+        for mask_type in range(1, num_mask):
+            self.restore_batch()
+            
+            mask_str = self.mask_type_list[mask_type]
+            obs_mask_name = 'obs_' + mask_str + '_mask'
+            self.obs_mask = sample_batched[obs_mask_name]
+
+            self.self_augmenter.augment(self.real,
+                                        self.obs,
+                                        self.syn,
+                                        self.attr_real,
+                                        self.attr_obs,
+                                        self.real_mask,
+                                        self.obs_mask,
+                                        mask_type,
+                                        self.source_domain,
+                                        self.target_domain)
+            
+            cur_nimg = self.train_step(batch_size,
+                                       cur_it,
+                                       total_it,
+                                       phase,
+                                       cur_resol,
+                                       cur_level,
+                                       cur_nimg)
+            
+            # model intermediate results
+            self.snapshot.snapshot_augmented_image(self.global_it,
+                                                   cur_it,
+                                                   total_it,
+                                                   phase,
+                                                   cur_resol,
+                                                   cur_level,
+                                                   batch_size,
+                                                   self.obs,
+                                                   self.syn,
+                                                   self.real,
+                                                   self.obs_mask)
+                  
     def backup_batch(self):                    
         self.temp_real = self.real
         self.temp_obs = self.obs
@@ -378,7 +419,7 @@ class FaceGenStarGAN():
                                cur_resol,
                                cur_level,
                                batch_size,
-                               self.real,
+                               self.obs,
                                self.syn,
                                self.obs_mask,
                                self.G,

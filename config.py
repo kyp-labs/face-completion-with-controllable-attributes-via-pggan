@@ -165,6 +165,7 @@ class Config():
         # Snapshot
         self.snapshot = EasyDict()
         self.snapshot.exp_dir = './exp'  # experiment dir
+        self.snapshot.selfaugment_dir = './aug'  # experiment dir
         self.snapshot.sample_freq = 128  # sample frequency, 500
         self.snapshot.sample_freq_dict = {4: 128,
                                           8: 256,
