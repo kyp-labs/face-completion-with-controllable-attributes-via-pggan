@@ -234,8 +234,8 @@ class Snapshot(object):
         # ===generate sample images===
         samples = []
         if (it % sample_freq == 1) or it == total_it:
-            # samples = self.image_sampling(minibatch_size)
-            samples = self.generator.snapshot(cur_resol, G)
+            samples = self.image_sampling(minibatch_size)
+            # samples = self.generator.snapshot(cur_resol, G)
             filename = '%s-%dx%d-%s-%s.png' % (str(global_it).zfill(6),
                                                cur_resol,
                                                cur_resol,
@@ -334,16 +334,10 @@ class Snapshot(object):
             samples += [np.concatenate(one_row, axis=2)]
             
         samples = np.concatenate(samples, axis=1).transpose([1, 2, 0])
-
-        half = samples.shape[1] // 2
-        samples[:, :half, :] = \
-            samples[:, :half, :] - np.min(samples[:, :half, :])
-        samples[:, :half, :] = \
-            samples[:, :half, :] / np.max(samples[:, :half, :])
-        samples[:, half:, :] = \
-            samples[:, half:, :] - np.min(samples[:, half:, :])
-        samples[:, half:, :] = \
-            samples[:, half:, :] / np.max(samples[:, half:, :])
+            
+        for idx in range(3):
+            samples[:, idx, :] -= np.min(samples[:, idx, :])
+            samples[:, idx, :] /= np.max(samples[:, idx, :])
 
         return samples
 

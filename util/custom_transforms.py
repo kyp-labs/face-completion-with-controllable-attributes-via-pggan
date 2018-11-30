@@ -200,12 +200,12 @@ class PolygonMask(PolygonMaskBase):
 
         """
         image = sample['image']
-        landmark = sample['landmark']
+        landmark = sample['landmark'] # tuple[10]
         gender = np.argmax(sample['attr'], axis=1)
         fake_gender = random.randint(0, 1)
 
         resolution = image.size[-1]
-        real_mask = np.full([resolution, resolution], 2,
+        real_mask = np.full([resolution, resolution], gender,
                             dtype=np.uint8)
         obs_mask = real_mask.copy()
         
@@ -222,9 +222,8 @@ class PolygonMask(PolygonMaskBase):
         else:
             polygon_coords = self.make_face_mask(landmark, resolution)
 
-        cv2.fillPoly(real_mask, polygon_coords, int(gender))
         cv2.fillPoly(obs_mask, polygon_coords, fake_gender)
-
+        
         sample['real_mask'] = Image.fromarray(np.int8(real_mask))
         sample['obs_mask'] = Image.fromarray(np.int8(obs_mask))
         sample['gender'] = int(gender)

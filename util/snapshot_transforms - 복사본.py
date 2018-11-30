@@ -25,6 +25,12 @@ class PolygonMaskBase(object):
         self.left_lip = np.take(landmark, self.landmark_idx["left_lip"])
         self.right_lip = np.take(landmark, self.landmark_idx["right_lip"])
         
+        self.left_eye = self.left_eye.astype(np.int32).reshape(1, -1, 2)
+        self.right_eye = self.right_eye.astype(np.int32).reshape(1, -1, 2)
+        self.nose = self.nose.astype(np.int32).reshape(1, -1, 2)
+        self.left_lip = self.left_lip.astype(np.int32).reshape(1, -1, 2)
+        self.right_lip = self.right_lip.astype(np.int32).reshape(1, -1, 2)
+        
     def make_face_mask(self, landmark, resolution):
         
         self.convert_landmark_coord(landmark)
@@ -32,58 +38,58 @@ class PolygonMaskBase(object):
         # Polygon Coordinae Intiailziation
         LEYE, REYE, RCHEEK, RLIP, LLIP, LCHEEK = 0, 1, 2, 3, 4, 5
         num_point = 6
-        polygon = np.zeros((num_point, 2), dtype=np.int32)
+        polygon = np.zeros((landmark.shape[0], num_point, 2), dtype=np.int32)
         # polygon = polygon.astype(np.int32).reshape(1, -1, 2)
 
         # left eye X
-        eye_width = self.left_eye[X] - self.nose[X]
+        eye_width = self.left_eye[:, 0, X] - self.nose[:, 0, X]
         eye_width = abs(eye_width).astype(np.int32)
-        polygon[LEYE, X] = self.left_eye[X] - eye_width
+        polygon[:, LEYE, X] = self.left_eye[:, 0, X] - eye_width
         
         # left eye Y
-        eye_height = self.left_eye[Y] - self.nose[Y]
+        eye_height = self.left_eye[:, 0, Y] - self.nose[:, 0, Y]
         eye_height = abs(eye_height).astype(np.int32) / 2
-        polygon[LEYE, Y] = self.left_eye[Y] - eye_height
+        polygon[:, LEYE, Y] = self.left_eye[:, 0, Y] - eye_height
         
         # right eye X
-        eye_width = self.right_eye[X] - self.nose[X]
+        eye_width = self.right_eye[:, 0, X] - self.nose[:, 0, X]
         eye_width = abs(eye_width).astype(np.int32)
-        polygon[REYE, X] = self.right_eye[X] + eye_width
+        polygon[:, REYE, X] = self.right_eye[:, 0, X] + eye_width
         
         # right eye Y
-        eye_height = self.right_eye[Y] - self.nose[Y]
+        eye_height = self.right_eye[:, 0, Y] - self.nose[:, 0, Y]
         eye_height = abs(eye_height).astype(np.int32) / 2
-        polygon[REYE, Y] = self.right_eye[Y] - eye_height
+        polygon[:, REYE, Y] = self.right_eye[:, 0, Y] - eye_height
 
         # left cheek X
-        polygon[LCHEEK, X] = polygon[LEYE, X]
+        polygon[:, LCHEEK, X] = polygon[:, LEYE, X]
         
         # left cheek Y
-        polygon[LCHEEK, Y] = self.nose[1]
+        polygon[:, LCHEEK, Y] = self.nose[:, 0, 1]
         
         # right cheek X
-        polygon[RCHEEK, X] = polygon[REYE, X]
+        polygon[:, RCHEEK, X] = polygon[:, REYE, X]
         
         # right cheek y
-        polygon[RCHEEK, Y] = self.nose[1]
+        polygon[:, RCHEEK, Y] = self.nose[:, 0, 1]
 
         # left lip X
-        polygon[LLIP, X] = self.left_lip[X]
+        polygon[:, LLIP, X] = self.left_lip[:, 0, X]
         
         # left lip Y
-        lip_height = self.left_lip[Y] - self.nose[Y]
+        lip_height = self.left_lip[:, 0, Y] - self.nose[:, 0, Y]
         lip_height = abs(lip_height).astype(np.int32) * 2 // 3
-        polygon[LLIP, Y] = self.left_lip[Y] + lip_height
+        polygon[:, LLIP, Y] = self.left_lip[:, 0, Y] + lip_height
 
         # right lip X
-        polygon[RLIP, X] = self.right_lip[X]
+        polygon[:, RLIP, X] = self.right_lip[:, 0, X]
         
         # right lip Y
-        lip_height = abs(self.right_lip[Y] - self.nose[Y])
+        lip_height = abs(self.right_lip[:, 0, Y] - self.nose[:, 0, Y])
         lip_height = lip_height.astype(np.int32) * 2 // 3
-        polygon[RLIP, Y] = self.right_lip[Y] + lip_height
+        polygon[:, RLIP, Y] = self.right_lip[:, 0, Y] + lip_height
         
-        polygon = polygon.reshape((1, -1, 2))
+        # polygon[:, num_point-1, :] = polygon[:, 0, :]
         
         landmark_adjust_ratio = 256 // resolution
         polygon = polygon // landmark_adjust_ratio
@@ -96,45 +102,45 @@ class PolygonMaskBase(object):
         
         ULEYE, UREYE, LREYE, LLEYE = 0, 1, 2, 3
         num_point = 4
-        polygon = np.zeros((num_point, 2), dtype=np.int32)
+        polygon = np.zeros((landmark.shape[0], num_point, 2), dtype=np.int32)
         
         # upper left eye X
-        eye_width = self.left_eye[X] - self.nose[X]
+        eye_width = self.left_eye[:, 0, X] - self.nose[:, 0, X]
         eye_width = abs(eye_width).astype(np.int32)
-        polygon[ULEYE, X] = self.left_eye[X] - eye_width
+        polygon[:, ULEYE, X] = self.left_eye[:, 0, X] - eye_width
         
         # upper left eye Y
-        eye_height = self.left_eye[Y] - self.nose[Y]
+        eye_height = self.left_eye[:, 0, Y] - self.nose[:, 0, Y]
         eye_height = abs(eye_height).astype(np.int32) / 2
-        polygon[ULEYE, Y] = self.left_eye[Y] - eye_height
+        polygon[:, ULEYE, Y] = self.left_eye[:, 0, Y] - eye_height
         
         # upper right eye X
-        eye_width = self.right_eye[X] - self.nose[X]
+        eye_width = self.right_eye[:, 0, X] - self.nose[:, 0, X]
         eye_width = abs(eye_width).astype(np.int32)
-        polygon[UREYE, X] = self.right_eye[X] + eye_width
+        polygon[:, UREYE, X] = self.right_eye[:, 0, X] + eye_width
         
         # upper right eye Y
-        eye_height = self.right_eye[Y] - self.nose[Y]
+        eye_height = self.right_eye[:, 0, Y] - self.nose[:, 0, Y]
         eye_height = abs(eye_height).astype(np.int32) / 2
-        polygon[UREYE, Y] = self.right_eye[Y] - eye_height
+        polygon[:, UREYE, Y] = self.right_eye[:, 0, Y] - eye_height
 
         # lower left eye X
-        polygon[LLEYE, X] = polygon[ULEYE, X]
+        polygon[:, LLEYE, X] = polygon[:, ULEYE, X]
         
         # lower left eye Y
-        eye_height = self.left_eye[Y] - self.nose[Y]
+        eye_height = self.left_eye[:, 0, Y] - self.nose[:, 0, Y]
         eye_height = abs(eye_height).astype(np.int32) / 2
-        polygon[LLEYE, Y] = self.left_eye[Y] + eye_height
+        polygon[:, LLEYE, Y] = self.left_eye[:, 0, Y] + eye_height
         
         # lower right eye X
-        polygon[LREYE, X] = polygon[UREYE, X]
+        polygon[:, LREYE, X] = polygon[:, UREYE, X]
         
         # lower right eye Y
-        eye_height = self.right_eye[Y] - self.nose[Y]
+        eye_height = self.right_eye[:, 0, Y] - self.nose[:, 0, Y]
         eye_height = abs(eye_height).astype(np.int32) / 2
-        polygon[LREYE, Y] = self.right_eye[Y] + eye_height
+        polygon[:, LREYE, Y] = self.right_eye[:, 0, Y] + eye_height
 
-        polygon = polygon.reshape((1, -1, 2))
+        # polygon[:, num_point-1, :] = polygon[:, 0, :]
         
         landmark_adjust_ratio = 256 // resolution
         polygon = polygon // landmark_adjust_ratio
@@ -148,41 +154,41 @@ class PolygonMaskBase(object):
         
         ULNOSE, URNOSE, LRNOSE, LLNOSE = 0, 1, 2, 3
         num_point = 4
-        polygon = np.zeros((num_point, 2), dtype=np.int32)
+        polygon = np.zeros((landmark.shape[0], num_point, 2), dtype=np.int32)
         
         # upper left nose X
-        nose_width = self.left_eye[X] - self.nose[X]
+        nose_width = self.left_eye[:, 0, X] - self.nose[:, 0, X]
         nose_width = abs(nose_width).astype(np.int32) / 2
-        polygon[ULNOSE, X] = self.nose[X] - nose_width
+        polygon[:, ULNOSE, X] = self.nose[:, 0, X] - nose_width
         
         # upper left nose Y
-        polygon[ULNOSE, Y] = self.left_eye[Y]
+        polygon[:, ULNOSE, Y] = self.left_eye[:, 0, Y]
         
         # upper right nose X
-        nose_width = self.right_eye[X] - self.nose[X]
+        nose_width = self.right_eye[:, 0, X] - self.nose[:, 0, X]
         nose_width = abs(nose_width).astype(np.int32) / 2
-        polygon[URNOSE, X] = self.nose[X] + nose_width
+        polygon[:, URNOSE, X] = self.nose[:, 0, X] + nose_width
         
         # upper right nose Y
-        polygon[URNOSE, Y] = self.right_eye[Y]
+        polygon[:, URNOSE, Y] = self.right_eye[:, 0, Y]
 
         # lower left nose X
-        polygon[LLNOSE, X] = polygon[ULNOSE, X] 
+        polygon[:, LLNOSE, X] = polygon[:, ULNOSE, X] 
         
         # lower left nose Y
-        nose_height = self.left_lip[Y] - self.nose[Y]
+        nose_height = self.left_lip[:, 0, Y] - self.nose[:, 0, Y]
         nose_height = abs(nose_height).astype(np.int32) / 2
-        polygon[LLNOSE, Y] = self.nose[Y] + nose_height
+        polygon[:, LLNOSE, Y] = self.nose[:, 0, Y] + nose_height
         
         # lower right nose X
-        polygon[LRNOSE, X] = polygon[URNOSE, X]
+        polygon[:, LRNOSE, X] = polygon[:, URNOSE, X]
         
         # lower right nose Y
-        nose_height = self.right_lip[Y] - self.nose[Y]
+        nose_height = self.right_lip[:, 0, Y] - self.nose[:, 0, Y]
         nose_height = abs(nose_height).astype(np.int32) / 2
-        polygon[LRNOSE, Y] = self.nose[Y] + nose_height
+        polygon[:, LRNOSE, Y] = self.nose[:, 0, Y] + nose_height
         
-        polygon = polygon.reshape((1, -1, 2))
+        # polygon[:, num_point-1, :] = polygon[:, 0, :]
 
         landmark_adjust_ratio = 256 // resolution
         polygon = polygon // landmark_adjust_ratio
@@ -195,41 +201,41 @@ class PolygonMaskBase(object):
 
         ULLIP, URLIP, LRLIP, LLLIP = 0, 1, 2, 3
         num_point = 4
-        polygon = np.zeros((num_point, 2), dtype=np.int32)
+        polygon = np.zeros((landmark.shape[0], num_point, 2), dtype=np.int32)
         offset = 3
         # upper left lip X
-        polygon[ULLIP, X] = self.left_lip[X] - offset
+        polygon[:, ULLIP, X] = self.left_lip[:, 0, X] - offset
         
         # upper left lip Y
-        lip_height = self.left_lip[Y] - self.nose[Y]
+        lip_height = self.left_lip[:, 0, Y] - self.nose[:, 0, Y]
         lip_height = abs(lip_height).astype(np.int32) / 2
-        polygon[ULLIP, Y] = self.left_lip[Y] - lip_height
+        polygon[:, ULLIP, Y] = self.left_lip[:, 0, Y] - lip_height
         
         # upper right lip X
-        polygon[URLIP, X] = self.right_lip[X] + offset
+        polygon[:, URLIP, X] = self.right_lip[:, 0, X] + offset
         
         # upper right lip Y
-        lip_height = self.right_lip[Y] - self.nose[Y]
+        lip_height = self.right_lip[:, 0, Y] - self.nose[:, 0, Y]
         lip_height = abs(lip_height).astype(np.int32) / 2
-        polygon[URLIP, Y] = self.right_lip[Y] - lip_height
+        polygon[:, URLIP, Y] = self.right_lip[:, 0, Y] - lip_height
 
         # lower left lip X
-        polygon[LLLIP, X] = self.left_lip[X] - offset
+        polygon[:, LLLIP, X] = self.left_lip[:, 0, X] - offset
         
         # lower left lip Y
-        lip_height = self.left_lip[Y] - self.nose[Y]
+        lip_height = self.left_lip[:, 0, Y] - self.nose[:, 0, Y]
         lip_height = abs(lip_height).astype(np.int32) * 2 // 3
-        polygon[LLLIP, Y] = self.left_lip[Y] + lip_height
+        polygon[:, LLLIP, Y] = self.left_lip[:, 0, Y] + lip_height
         
         # lower right lip X
-        polygon[LRLIP, X] = self.right_lip[X] + offset
+        polygon[:, LRLIP, X] = self.right_lip[:, 0, X] + offset
         
         # lower right lip Y
-        lip_height = self.right_lip[Y] - self.nose[Y]
+        lip_height = self.right_lip[:, 0, Y] - self.nose[:, 0, Y]
         lip_height = abs(lip_height).astype(np.int32) * 2 // 3
-        polygon[LRLIP, Y] = self.right_lip[Y] + lip_height
+        polygon[:, LRLIP, Y] = self.right_lip[:, 0, Y] + lip_height
 
-        polygon = polygon.reshape((1, -1, 2))
+        # polygon[:, num_point-1, :] = polygon[:, 0, :]
         
         landmark_adjust_ratio = 256 // resolution
         polygon = polygon // landmark_adjust_ratio
