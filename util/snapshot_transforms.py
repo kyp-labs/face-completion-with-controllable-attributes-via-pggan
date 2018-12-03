@@ -265,6 +265,8 @@ class PermutePolygonMask(PolygonMaskBase):
         landmark = sample['landmark']
         resolution = image.size[-1]
 
+        CONTEXT_BIT = 0
+        MASK_BIT = 1
         # calc polygon
         polygon_list = []
         for polygon_type in range(self.num_mask):
@@ -273,7 +275,10 @@ class PermutePolygonMask(PolygonMaskBase):
 
         mask_list = []
         masked_real_list = []
-        mask_bits = np.full([resolution, resolution], 2, dtype=np.uint8)
+        mask_bits = np.full([resolution, resolution],
+                            CONTEXT_BIT,
+                            dtype=np.uint8)
+        
         for polygon in polygon_list:
             # draw polygon on the real image
             masked_real = np.asarray(sample['image'].copy())
@@ -292,7 +297,7 @@ class PermutePolygonMask(PolygonMaskBase):
             sub_mask_list = []
             for attr in range(sample['attr'].shape[1]):
                 mask = mask_bits.copy()
-                cv2.fillPoly(mask, polygon, int(attr))
+                cv2.fillPoly(mask, polygon, MASK_BIT)
                 sub_mask_list.append(Image.fromarray(np.int8(mask)))
 
             mask_list.append(sub_mask_list)

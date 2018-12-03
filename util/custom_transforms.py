@@ -243,17 +243,16 @@ class PolygonMask(PolygonMaskBase):
         
         N, attr_size = attr_real.shape
         attr_obs = np.zeros_like(attr_real)
-        attr_obs[np.arange(N), target_domain] = 1
-        
+        attr_obs[np.arange(N), target_domain] = 1       
         resolution = image.size[-1]
-        mask = np.full([resolution, resolution], source_domain,
-                            dtype=np.uint8)
+        
+        CONTEXT_BIT = 0
+        MASK_BIT = 1
+        mask = np.full([resolution, resolution], CONTEXT_BIT, dtype=np.uint8)
 
         polygon_type = random.randint(0, 3)
         polygon = self.get_polygon(polygon_type, landmark, resolution)
-
-
-        cv2.fillPoly(mask, polygon, target_domain)
+        cv2.fillPoly(mask, polygon, MASK_BIT)
 
         sample['mask'] = Image.fromarray(np.int8(mask))
         sample['attr_obs'] = attr_obs
