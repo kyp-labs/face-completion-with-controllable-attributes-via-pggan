@@ -1,6 +1,5 @@
 from model.stargan_model import *
 
-
 def test_pix_cls_stargan():
     # c_dim: the number of domains
     D = StarDiscriminator(c_dim=2)

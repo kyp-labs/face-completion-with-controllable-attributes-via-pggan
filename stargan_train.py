@@ -122,7 +122,7 @@ class FaceGenStarGAN():
         self.snapshot = Snapshot(self.config, self.use_cuda)
         self.snapshot.prepare_logging()
         self.snapshot.restore_model(self.G, self.D, self.optim_G, self.optim_D)
-        
+
     def train(self):
         """Training for progressive growing model.
 
@@ -230,17 +230,17 @@ class FaceGenStarGAN():
                     # get a next batch - temporary code
                     self.real = sample_batched['image']
                     self.attr_real = sample_batched['attr']
-                    
-                    self.real_mask = sample_batched['real_mask']                    
+
+                    self.real_mask = sample_batched['real_mask']
                     self.obs_mask = sample_batched['obs_mask']
                     fake_gender = sample_batched['fake_gender']
-                    
+
                     self.source_domain = sample_batched['gender']
                     self.target_domain = sample_batched['fake_gender']
 
                     self.attr_obs = self.generate_attr_obs(self.attr_real,
                                                            fake_gender)
-                    
+
                     if self.mode == Mode.inpainting:
                         self.obs = sample_batched['masked_image']
                     else:
@@ -335,7 +335,7 @@ class FaceGenStarGAN():
         Args:
             cur_level: progress indicator of progressive growing network
             detach: flag whether to detach graph from generator or not
-            
+
         """
         if self.use_mask:
             self.syn = self.G(self.obs, self.obs_mask, self.attr_obs)
@@ -363,7 +363,7 @@ class FaceGenStarGAN():
                               self.d_attr_obs,
                               self.use_mask,
                               self.pixel_cls_syn)
-        
+
         self.loss.g_losses.g_loss.backward()
         self.optim_G.step()
 
@@ -410,7 +410,7 @@ class FaceGenStarGAN():
             and self.config.env.num_gpus > 0
         if self.use_cuda:
             gpus = str(list(range(self.config.env.num_gpus)))
-            os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
             os.environ['CUDA_VISIBLE_DEVICES'] = gpus
 
     def register_on_gpu(self):
@@ -435,8 +435,8 @@ class FaceGenStarGAN():
                                                 dt.Resize(image_size),
                                                 dt.ToTensor(),
                                                 dt.Normalize(
-                                                    mean=(0.5,0.5,0.5),
-                                                    std=(0.5,0.5,0.5))])
+                                                    mean=(0.5, 0.5, 0.5),
+                                                    std=(0.5, 0.5, 0.5))])
 
         dataset_func = self.config.dataset.func
         ds = self.config.dataset
@@ -486,10 +486,9 @@ class FaceGenStarGAN():
         batch_index = np.arange(N)
         attr_obs = torch.zeros_like(attr_real)
         attr_obs[batch_index, obs_value.data.numpy()] = 1
-        
+
         return attr_obs
 
-        
     def create_optimizer(self):
         """Create optimizers of generator and discriminator."""
         self.optim_G = optim.Adam(self.G.parameters(),
@@ -512,7 +511,7 @@ class FaceGenStarGAN():
         num_iters_decay = total_it//2
         lr_update_step = 1000
         if cur_it % lr_update_step == 0 \
-            and cur_it > (total_it - num_iters_decay):
+                and cur_it > (total_it - num_iters_decay):
             self.G_lrate -= (self.G_lrate / float(num_iters_decay))
             self.D_lrate -= (self.D_lrate / float(num_iters_decay))
 
@@ -521,4 +520,5 @@ class FaceGenStarGAN():
             for param_group in self.optim_D.param_groups:
                 param_group['lr'] = self.D_lrate
 
-            print('Learning Rate, G: {}, D: {}.'.format(self.G_lrate, self.D_lrate))
+            print('Learning Rate, G: {}, D: {}.'.format(self.G_lrate,
+                                                        self.D_lrate))

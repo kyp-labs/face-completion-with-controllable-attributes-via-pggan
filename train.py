@@ -265,7 +265,7 @@ class FaceGen():
                     self.attr_real = sample_batched['attr']
                     N = self.attr_real.shape[0]
                     self.attr_real = self.attr_real.view(N, -1)
-                    
+
                     self.mask = sample_batched['obs_mask']
                     N, H, W = self.mask.shape
                     self.mask = self.mask.reshape((N, 1, H, W))
@@ -499,6 +499,7 @@ class FaceGen():
 
     def load_train_set(self, resol, batch_size):
         """Load train set.
+
         Args:
             resol: progress indicator of progressive growing network
             batch_size: flag for detaching syn image from generator graph
@@ -506,8 +507,9 @@ class FaceGen():
         transform_options = transforms.Compose([dt.PolygonMask(),
                                                 # dt.RandomHorizontalFlip(),
                                                 dt.ToTensor(),
-                                                dt.Normalize(mean=(0.5,0.5,0.5),
-                                                    std=(0.5,0.5,0.5))])
+                                                dt.Normalize(
+                                                    mean=(0.5, 0.5, 0.5),
+                                                    std=(0.5, 0.5, 0.5))])
 
         dataset_func = self.config.dataset.func
         ds = self.config.dataset
@@ -556,9 +558,9 @@ class FaceGen():
                                   betas=(self.config.optimizer.D_opt.beta1,
                                   self.config.optimizer.D_opt.beta2))
 
-
     def update_lr(self, cur_it, total_it, replay_mode=False):
         """Update learning rate.
+
         Args:
             cur_it: current # of iterations in the phasek
             total_it: total # of iterations in the phase
@@ -571,7 +573,7 @@ class FaceGen():
         num_iters_decay = total_it//2
         lr_update_step = 1000
         if cur_it % lr_update_step == 0 \
-            and cur_it > (total_it - num_iters_decay):
+                and cur_it > (total_it - num_iters_decay):
             self.G_lrate -= (self.G_lrate / float(num_iters_decay))
             self.D_lrate -= (self.D_lrate / float(num_iters_decay))
 
@@ -580,7 +582,8 @@ class FaceGen():
             for param_group in self.optim_D.param_groups:
                 param_group['lr'] = self.D_lrate
 
-            print('Learning Rate, G: {}, D: {}.'.format(self.G_lrate, self.D_lrate))
+            print('Learning Rate, G: {}, D: {}.'.format(self.G_lrate,
+                                                        self.D_lrate))
 
 
 if __name__ == "__main__":

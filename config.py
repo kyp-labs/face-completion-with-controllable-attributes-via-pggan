@@ -229,7 +229,7 @@ class TestConfig(Config):
         self.train.total_size = 500000
         self.train.train_size = 250000
         self.train.transition_size = 250000
-        
+
         self.sched.batch_base = 32  # Maximum batch size
         self.sched.batch_dict = {4: 64,
                                  8: 32,
@@ -267,9 +267,9 @@ class StarGANConfig(Config):
         self.dataset.attibute_size = 2
         self.dataset.num_classes = 3
         self.dataset.num_channels = 3
-        
+
         self.env.num_gpus = 2
-        
+
         self.loss.gan = Gan.wgan_gp
 
         self.train.D_repeats = 5
@@ -281,7 +281,7 @@ class StarGANConfig(Config):
         self.train.net.max_resolution = 128
         self.train.use_mask = True
         self.train.use_attr = True
-                # weight for target area of reconstruction loss (0.7)
+        # weight for target area of reconstruction loss (0.7)
         self.loss.alpha_recon = 0.0
 
         # weight of reconstruction loss (paper = 500)

@@ -53,6 +53,7 @@ class FaceGenLoss():
         gan : type of gan {wgan gp, lsgan, gan}
         vgg16 : VGG16 feature extractor
         adver_loss_func : adversarial loss function
+
     """
 
     def __init__(self, config, use_cuda=False, gpu=-1):
@@ -190,6 +191,7 @@ class FaceGenLoss():
 
     def calc_attr_loss(self, prediction, target):
         """Calculate attribute loss.
+
         Args:
             attr_real: attribute of real images
             d_attr_real : classes for attributes of real images
@@ -200,11 +202,12 @@ class FaceGenLoss():
         attr_loss = F.binary_cross_entropy_with_logits(prediction,
                                                        target,
                                                        size_average=False) \
-                                                       / prediction.size(0)
+            / prediction.size(0)
         return attr_loss
 
     def calc_cycle_loss(self, G, cur_level, real, attr_real, mask, syn):
         """Calculate cycle consistency loss.
+
         Args:
             G: generator
             cur_level: progress indicator of progressive growing network
@@ -224,11 +227,11 @@ class FaceGenLoss():
                           attr=None,
                           mask=mask,
                           cur_level=cur_level)
-            
+
         # L1 norm
-        cycle_loss =  torch.mean(torch.abs(real - pred_real))
+        cycle_loss = torch.mean(torch.abs(real - pred_real))
         return cycle_loss
-    
+
     def calc_feat_loss(self, real, syn):
         """Calculate feature loss.
 
@@ -418,7 +421,7 @@ class FaceGenLoss():
         if self.config.train.use_attr:
             self.d_losses.d_attr_loss = self.calc_attr_loss(d_attr_real,
                                                             attr_real)
-            
+
         if self.gan == Gan.wgan_gp:
             self.d_losses.gradient_penalty = \
                 self.calc_gradient_penalty(D,

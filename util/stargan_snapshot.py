@@ -16,6 +16,7 @@ from util.logger import Logger
 from util.util import Phase
 from util.snapshot_generator import SnapshotGenerator
 
+
 class Snapshot(object):
     """Snapshot classes.
 
@@ -139,7 +140,7 @@ class Snapshot(object):
 
         self.log_dir = os.path.join(root_log_dir, self.current_time, "")
         self.logger = Logger(self.log_dir)
-        
+
     def snapshot(self,
                  global_it,
                  it,
@@ -195,7 +196,6 @@ class Snapshot(object):
             t.start()
         else:
             self.periodic_snapshot(*args)
-
 
     def periodic_snapshot(self,
                           global_it,
@@ -277,7 +277,8 @@ class Snapshot(object):
         """
         formation = '%d [%dx%d](%d/%d)%.1f %s ' + \
                     '| G:%.3f, D:%.3f ' + \
-                    '| G_adv:%.3f, A:%.3f, R:%.3f, F:%.3f, B:%.3f, C: %.3f, P: %.3f' + \
+                    '| G_adv:%.3f, A:%.3f, R:%.3f, F:%.3f, ' + \
+                    'B:%.3f, C: %.3f, P: %.3f' + \
                     '| D_adv:%.3f(%.3f,%.3f), A:%.3f, GP:%.3f, P: %.3f'
         values = (global_it,
                   cur_resol,
@@ -314,33 +315,32 @@ class Snapshot(object):
         if n_row >= minibatch_size:
             n_row = minibatch_size*3 // 4
         n_col = int(np.ceil(minibatch_size / float(n_row)))
-        
+
         N, C, H, W = self.real.shape
         mask = self.obs_mask.repeat((1, C, 1, 1))
-        
+
         # sample_idx = np.random.randint(minibatch_size, size=n_row*n_col)
         samples = []
         i = j = k = 0
         for _ in range(n_row):
             one_row = []
             for _ in range(n_col):
-                one_row.append(mask[k].cpu().data.numpy()) # mask
-                one_row.append(self.real[i].cpu().data.numpy()) # real
-                one_row.append(self.syn[j].cpu().data.numpy()) # syn
+                one_row.append(mask[k].cpu().data.numpy())  # mask
+                one_row.append(self.real[i].cpu().data.numpy())  # real
+                one_row.append(self.syn[j].cpu().data.numpy())  # syn
                 i += 1
                 j += 1
                 k += 1
-                
+
             samples += [np.concatenate(one_row, axis=2)]
-            
+
         samples = np.concatenate(samples, axis=1).transpose([1, 2, 0])
-            
+
         for idx in range(3):
             samples[:, idx, :] -= np.min(samples[:, idx, :])
             samples[:, idx, :] /= np.max(samples[:, idx, :])
 
         return samples
-
 
     def log_loss_to_tensorboard(self, global_it):
         """Tensorboard.
@@ -380,7 +380,7 @@ class Snapshot(object):
                 self.d_losses.gradient_penalty,
                 'Discriminator/Pixelwise Loss':
                 self.d_losses.pixel_loss}
-                
+
         for tag, value in info.items():
             self.logger.scalar_summary(tag, value, global_it)
 

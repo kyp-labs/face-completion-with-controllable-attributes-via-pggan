@@ -7,7 +7,7 @@ import collections
 import cv2
 import numpy as np
 import torch
-from PIL import Image, ImageOps, ImageEnhance
+from PIL import Image
 from torchvision.transforms import functional as F
 from util.snapshot_transforms import PolygonMaskBase
 
@@ -27,15 +27,18 @@ class RandomHorizontalFlip(object):
     """
 
     def __init__(self, p=0.5):
+        """Initialize."""
         self.p = p
 
     def __call__(self, sample):
-        """
+        """Call.
+
         Args:
             img (PIL Image): Image to be flipped.
 
         Returns:
             PIL Image: Randomly flipped image.
+
         """
         tmp_img = sample['image']
         tmp_obs_mask = sample['obs_mask']
@@ -52,12 +55,15 @@ class RandomHorizontalFlip(object):
         return sample
 
     def __repr__(self):
+        """Repr."""
         return self.__class__.__name__ + '(p={})'.format(self.p)
 
 
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
-    Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels, this transform
+
+    Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)``
+    for ``n`` channels, this transform
     will normalize each channel of the input ``torch.*Tensor`` i.e.
     ``input[channel] = (input[channel] - mean[channel]) / std[channel]``
 
@@ -67,23 +73,28 @@ class Normalize(object):
     """
 
     def __init__(self, mean, std):
+        """Initialize."""
         self.mean = mean
         self.std = std
 
     def __call__(self, sample):
-        """
+        """Call.
+
         Args:
             tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
 
         Returns:
             Tensor: Normalized Tensor image.
+
         """
         tmp = sample['image']
         sample['image'] = F.normalize(tmp, self.mean, self.std)
         return sample
 
     def __repr__(self):
-        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+        """Repr."""
+        return self.__class__.__name__ + \
+            '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
 class Resize(object):
@@ -100,41 +111,50 @@ class Resize(object):
     """
 
     def __init__(self, size, interpolation=Image.BILINEAR):
-        assert isinstance(size, int) or (isinstance(size, collections.Iterable) and len(size) == 2)
+        """Init."""
+        assert isinstance(size, int) or \
+            (isinstance(size, collections.Iterable) and len(size) == 2)
         self.size = size
         self.interpolation = interpolation
 
     def __call__(self, sample):
-        """
+        """Call.
+
         Args:
             img (PIL Image): Image to be scaled.
 
         Returns:
             PIL Image: Rescaled image.
+
         """
         tmp = sample['image']
         sample['image'] = F.resize(tmp, self.size, self.interpolation)
         return sample
 
     def __repr__(self):
+        """Repr."""
         interpolate_str = _pil_interpolation_to_str[self.interpolation]
-        return self.__class__.__name__ + '(size={0}, interpolation={1})'.format(self.size, interpolate_str)
+        return self.__class__.__name__ + \
+            '(size={0}, interpolation={1})'.format(self.size, interpolate_str)
 
 
 class ToTensor(object):
     """Convert a ``PIL Image`` or ``numpy.ndarray`` to tensor.
 
     Converts a PIL Image or numpy.ndarray (H x W x C) in the range
-    [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0].
+    [0, 255] to a torch.FloatTensor of shape (C x H x W)
+    in the range [0.0, 1.0].
     """
 
     def __call__(self, sample):
-        """
+        """Call.
+
         Args:
             pic (PIL Image or numpy.ndarray): Image to be converted to tensor.
 
         Returns:
             Tensor: Converted image.
+
         """
         for elem in ['image', 'attr', 'real_mask', 'obs_mask']:
             if elem == 'attr':
@@ -147,6 +167,7 @@ class ToTensor(object):
         return sample
 
     def __repr__(self):
+        """Repr."""
         return self.__class__.__name__ + '()'
 
 
@@ -160,24 +181,28 @@ class CenterCrop(object):
     """
 
     def __init__(self, size):
+        """Init."""
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
         else:
             self.size = size
 
     def __call__(self, sample):
-        """
+        """Call.
+
         Args:
             img (PIL Image): Image to be cropped.
 
         Returns:
             PIL Image: Cropped image.
+
         """
         tmp = sample['image']
         sample['image'] = F.center_crop(tmp, self.size)
         return sample
 
     def __repr__(self):
+        """Repr."""
         return self.__class__.__name__ + '(size={0})'.format(self.size)
 
 
@@ -200,7 +225,7 @@ class PolygonMask(PolygonMaskBase):
 
         """
         image = sample['image']
-        landmark = sample['landmark'] # tuple[10]
+        landmark = sample['landmark']  # tuple[10]
         gender = np.argmax(sample['attr'], axis=1)
         fake_gender = random.randint(0, 1)
 
@@ -208,9 +233,9 @@ class PolygonMask(PolygonMaskBase):
         real_mask = np.full([resolution, resolution], gender,
                             dtype=np.uint8)
         obs_mask = real_mask.copy()
-        
+
         polygon_type = random.randint(0, 3)
-        
+
         if polygon_type == 0:
             polygon_coords = self.make_face_mask(landmark, resolution)
         elif polygon_type == 1:
@@ -223,7 +248,7 @@ class PolygonMask(PolygonMaskBase):
             polygon_coords = self.make_face_mask(landmark, resolution)
 
         cv2.fillPoly(obs_mask, polygon_coords, fake_gender)
-        
+
         sample['real_mask'] = Image.fromarray(np.int8(real_mask))
         sample['obs_mask'] = Image.fromarray(np.int8(obs_mask))
         sample['gender'] = int(gender)

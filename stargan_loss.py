@@ -170,9 +170,10 @@ class FaceGenLoss():
 
         gradients = gradients.view(gradients.size(0), -1)
         return ((gradients.norm(2, dim=1) - 1.0) ** 2).mean()
-    
+
     def calc_attr_loss(self, prediction, target):
         """Calculate attribute loss.
+
         Args:
             attr_real: attribute of real images
             d_attr_real : classes for attributes of real images
@@ -183,12 +184,13 @@ class FaceGenLoss():
         attr_loss = F.binary_cross_entropy_with_logits(prediction,
                                                        target,
                                                        size_average=False)\
-                                                       / prediction.size(0)
+            / prediction.size(0)
 
         return attr_loss
 
     def calc_recon_loss(self, real, real_mask, syn, obs_mask):
         """Calculate reconstruction loss.
+
         Args:
             real (tensor) : real images
             real_mask (tensor) : domain masks of real images
@@ -206,11 +208,12 @@ class FaceGenLoss():
         alpha = self.alpha_recon
         diff = torch.abs(real - syn)
         recon_loss = alpha * mask * diff + (1 - alpha) * (1 - mask) * diff
-        recon_loss =  torch.mean(recon_loss)
+        recon_loss = torch.mean(recon_loss)
         return recon_loss
 
     def calc_bdy_loss(self, real, real_mask, syn, obs_mask):
         """Calculate boundary loss.
+
         Args:
             real (tensor) : real images
             real_mask (tensor) : domain masks of real images
@@ -235,7 +238,7 @@ class FaceGenLoss():
 
         w_ext = util.tofloat(self.use_cuda, w_ext)
 
-        bdy_loss =  torch.mean(w_ext * torch.abs(real - syn))
+        bdy_loss = torch.mean(w_ext * torch.abs(real - syn))
         # bdy_loss = bdy_loss.sum()/N
         return bdy_loss
 
@@ -255,7 +258,7 @@ class FaceGenLoss():
         pred_real = G(syn, real_mask, attr_real)
 
         # L1 norm
-        cycle_loss =  torch.mean(torch.abs(real - pred_real))
+        cycle_loss = torch.mean(torch.abs(real - pred_real))
         return cycle_loss
 
     def calc_pixel_loss(self,
@@ -265,6 +268,7 @@ class FaceGenLoss():
                         weight=None,
                         size_average=False):
         """Calculate cross entropy for segmentation class.
+
         Args:
             predict (tensor) : [batch_size, num_channels, height, width]
                                 prediction of pixelwise classifier
@@ -274,7 +278,7 @@ class FaceGenLoss():
                                     target domain id
             weight (tensor) : [# of classes]
                     weight of pixels
-            size_average : if size_average=True always means dividing 
+            size_average : if size_average=True always means dividing
                            by the total number of the elements
         Return:
             loss (scalar) : cross entropy loss
@@ -284,18 +288,18 @@ class FaceGenLoss():
         # target area of domain mask
         target_domain = target_domain.reshape(N, 1, 1, 1).repeat((1, C, H, W))
         loss_mask = util.tofloat(self.use_cuda, target == target_domain)
-        
+
         target_area_size = (loss_mask.view(N, -1) == 1).sum()
         # target_area_size = (loss_mask.view(N, -1) == 1).sum(dim=1)
         target_area_size = util.tofloat(self.use_cuda, target_area_size)
-        
+
         masked_predict = util.tofloat(self.use_cuda, predict * loss_mask)
         masked_target = util.tofloat(self.use_cuda, target * loss_mask)
 
-        pixel_loss =  self.cross_entropy2d(masked_predict,
-                                           masked_target,
-                                           weight,
-                                           size_average)
+        pixel_loss = self.cross_entropy2d(masked_predict,
+                                          masked_target,
+                                          weight,
+                                          size_average)
         # print(pixel_loss)
         pixel_loss = pixel_loss.sum() // target_area_size
         # print(target_area_size)
@@ -307,6 +311,7 @@ class FaceGenLoss():
                         weight=None,
                         size_average=False):
         """Calculate cross entropy for segmentation class.
+
         Args:
             predict (tensor) : [batch_size, num_channels, height, width]
                                 prediction of pixelwise classifier
@@ -314,7 +319,7 @@ class FaceGenLoss():
                                 target label {class id}
             weight (tensor) : [# of classes]
                     weight of pixels
-            size_average : if size_average=True always means dividing 
+            size_average : if size_average=True always means dividing
                            by the total number of the elements
         Return:
             loss (scalar) : cross entropy loss
@@ -398,13 +403,13 @@ class FaceGenLoss():
                 self.calc_pixel_loss(pixel_cls_syn,
                                      real_mask,
                                      target_domain)
-                
+
         self.g_losses.g_loss = self.g_losses.g_adver_loss + \
             self.lambda_attr*self.g_losses.g_attr_loss + \
             self.lambda_recon*self.g_losses.recon_loss + \
             self.lambda_bdy*self.g_losses.bdy_loss + \
             self.lambda_cycle*self.g_losses.cycle_loss + \
-            self.lambda_pixel*self.g_losses.pixel_loss            
+            self.lambda_pixel*self.g_losses.pixel_loss
 
     def calc_D_loss(self,
                     D,
@@ -468,14 +473,15 @@ class FaceGenLoss():
                 self.calc_pixel_loss(pixel_cls_real,
                                      real_mask,
                                      source_domain)
-                
+
         self.d_losses.d_loss = self.d_losses.d_adver_loss + \
             self.lambda_attr*self.d_losses.d_attr_loss + \
             self.lambda_GP*self.d_losses.gradient_penalty + \
             self.lambda_pixel*self.d_losses.pixel_loss
-            
+
         return self.d_losses
-    
+
+
 class MeanFilter(nn.Module):
     """MeanFilter classes.
 
