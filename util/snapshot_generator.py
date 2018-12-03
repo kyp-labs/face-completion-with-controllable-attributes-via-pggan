@@ -32,6 +32,9 @@ class SnapshotGenerator(object):
         self.use_mask = self.config.train.use_mask
         self.cur_resol = 0
 
+        self.attribute_size = self.config.dataset.attibute_size
+        self.mask_type_list = self.config.augment.mask_type_list
+        
         self.sample_file_name = self.config.dataset.sample_path
         if self.config.snapshot.gen_sample_from_file is False:
             self.sample_file_name = self.config.dataset.sample_path_temp
@@ -60,7 +63,9 @@ class SnapshotGenerator(object):
         self.cur_resol = cur_resol
         self.batch_size = batch_size
 
-        transform_options = transforms.Compose([dt2.PermutePolygonMask(),
+        transform_options = transforms.Compose([dt2.PermutePolygonMask(
+                                                    self.attribute_size,
+                                                    self.mask_type_list),
                                                 dt2.ToTensor(),
                                                 dt2.Normalize(
                                                     mean=(0.5, 0.5, 0.5),
@@ -111,7 +116,7 @@ class SnapshotGenerator(object):
             self.attr_real = sample_batched['attr']
             self.obs_attr_list = self.permute_attr(self.attr_real)
 
-            self.obs_mask_list = sample_batched['obs_mask_list']
+            self.mask_list = sample_batched['mask_list']
             self.masked_real_list = sample_batched['masked_real_list']
 
             self.obs = sample_batched['image']
@@ -127,15 +132,12 @@ class SnapshotGenerator(object):
                 N, C, H, W = self.obs.shape
 
                 for attr in range(attr_size):
-                    self.obs_mask = self.obs_mask_list[i][attr]
-                    # mask = self.obs_mask.repeat((1, C, 1, 1))
+                    self.mask = self.mask_list[i][attr]
+                    # mask = self.mask.repeat((1, C, 1, 1))
                     self.attr_obs = self.obs_attr_list[attr]
                     self.preprocess()
 
-                    if self.use_mask:
-                        self.syn = G(self.obs, self.obs_mask, self.attr_obs)
-                    else:
-                        self.syn = G(self.obs, self.attr_obs)
+                    self.syn = G(self.obs, self.attr_obs, self.mask)
 
                     batch.append(self.syn.cpu().data.numpy())  # real
 
@@ -173,6 +175,6 @@ class SnapshotGenerator(object):
         """Set input type to cuda or cpu according to gpu availability."""
         self.real = util.tofloat(self.use_cuda, self.real)
         self.attr_real = util.tofloat(self.use_cuda, self.attr_real)
-        self.obs_mask = util.tofloat(self.use_cuda, self.obs_mask)
+        self.mask = util.tofloat(self.use_cuda, self.mask)
         self.obs = util.tofloat(self.use_cuda, self.obs)
         self.attr_obs = util.tofloat(self.use_cuda, self.attr_obs)

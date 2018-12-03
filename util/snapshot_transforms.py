@@ -244,10 +244,12 @@ class PolygonMaskBase(object):
 class PermutePolygonMask(PolygonMaskBase):
     """Add Square mask to the sample."""
 
-    def __init__(self, num_classes=1):
+    def __init__(self, attribute_size, mask_type_list):
         """constructor."""
         super().__init__()
-        self.num_classes = num_classes
+        self.attribute_size = attribute_size
+        self.mask_type_list = mask_type_list
+        self.num_mask = len(self.mask_type_list)
 
     def __call__(self, sample):
         """caller.
@@ -261,18 +263,17 @@ class PermutePolygonMask(PolygonMaskBase):
         """
         image = sample['image']
         landmark = sample['landmark']
+        resolution = image.size[-1]
 
         # calc polygon
-        resolution = image.size[-1]
-        polygon1 = self.make_face_mask(landmark, resolution)
-        polygon2 = self.make_eye_mask(landmark, resolution)
-        polygon3 = self.make_nose_mask(landmark, resolution)
-        polygon4 = self.make_lip_mask(landmark, resolution)
-        polygon_list = [polygon1, polygon2, polygon3, polygon4]
+        polygon_list = []
+        for polygon_type in range(self.num_mask):
+            polygon = self.get_polygon(polygon_type, landmark, resolution)
+            polygon_list.append(polygon)
 
-        obs_mask_list = []
+        mask_list = []
         masked_real_list = []
-        real_mask = np.full([resolution, resolution], 2, dtype=np.uint8)
+        mask_bits = np.full([resolution, resolution], 2, dtype=np.uint8)
         for polygon in polygon_list:
             # draw polygon on the real image
             masked_real = np.asarray(sample['image'].copy())
@@ -288,22 +289,36 @@ class PermutePolygonMask(PolygonMaskBase):
             masked_real_list.append(Image.fromarray(masked_real))
 
             # make obs mask list
-            sub_obs_mask_list = []
+            sub_mask_list = []
             for attr in range(sample['attr'].shape[1]):
-                obs_mask = real_mask.copy()
-                cv2.fillPoly(obs_mask, polygon, int(attr))
-                sub_obs_mask_list.append(Image.fromarray(np.int8(obs_mask)))
+                mask = mask_bits.copy()
+                cv2.fillPoly(mask, polygon, int(attr))
+                sub_mask_list.append(Image.fromarray(np.int8(mask)))
 
-            obs_mask_list.append(sub_obs_mask_list)
+            mask_list.append(sub_mask_list)
 
         sample['masked_real_list'] = masked_real_list
-        sample['obs_mask_list'] = obs_mask_list
+        sample['mask_list'] = mask_list
         return sample
 
     def __repr__(self):  # noqa: D105
         """Repr."""
         return f'PolygonMask:(num_classes={str(self.num_classes)})'
-
+    
+    def get_polygon(self, polygon_type, landmark, resolution):
+        """Get polygon."""
+        if polygon_type == 0:
+            polygon = self.make_face_mask(landmark, resolution)
+        elif polygon_type == 1:
+            polygon = self.make_eye_mask(landmark, resolution)
+        elif polygon_type == 2:
+            polygon = self.make_nose_mask(landmark, resolution)
+        elif polygon_type == 3:
+            polygon = self.make_lip_mask(landmark, resolution)
+        else:
+            polygon = self.make_face_mask(landmark, resolution)
+ 
+        return polygon
 
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
@@ -364,19 +379,19 @@ class ToTensor(object):
             Tensor: Converted image.
 
         """
-        for elem in ['image', 'attr', 'masked_real_list', 'obs_mask_list']:
+        for elem in ['image', 'attr', 'masked_real_list', 'mask_list']:
             if elem == 'attr':
                 tmp = sample['attr']
                 sample[elem] = torch.from_numpy(tmp).float().squeeze()
 
-            elif elem == 'obs_mask_list':
-                obs_mask_list = []
-                for sub_obs_mask_list in sample['obs_mask_list']:
+            elif elem == 'mask_list':
+                mask_list = []
+                for sub_mask_list in sample['mask_list']:
                     sub_list = []
-                    for obs_mask in sub_obs_mask_list:
+                    for obs_mask in sub_mask_list:
                         sub_list.append(F.to_tensor(obs_mask))
-                    obs_mask_list.append(sub_list)
-                sample[elem] = obs_mask_list
+                    mask_list.append(sub_list)
+                sample[elem] = mask_list
             elif elem == 'masked_real_list':
                 masked_real_list = []
                 for masked_real in sample['masked_real_list']:

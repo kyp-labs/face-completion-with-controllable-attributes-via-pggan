@@ -98,13 +98,15 @@ class FaceGenStarGAN():
 
         # Generator & Discriminator Creation
         image_size = self.config.train.net.min_resolution
+        self.attribute_size = self.config.dataset.attibute_size
+
         self.G = StarGenerator(conv_dim=64,
-                               c_dim=self.config.dataset.attibute_size,
+                               c_dim=self.attribute_size,
                                repeat_num=6,
-                               use_mask=False)
+                               use_mask=self.config.train.use_mask)
         self.D = StarDiscriminator(image_size=image_size,
                                    conv_dim=64,
-                                   c_dim=self.config.dataset.attibute_size,
+                                   c_dim=self.attribute_size,
                                    repeat_num=6)
 
         self.register_on_gpu()
@@ -221,7 +223,6 @@ class FaceGenStarGAN():
 
                     # calculate current level (from 1)
                     if phase == Phase.transition:
-                        # transition [pref level, current level]
                         cur_level = float(R - min_resol + float(cur_it/to_it))
                     else:
                         # training
@@ -230,21 +231,13 @@ class FaceGenStarGAN():
                     # get a next batch - temporary code
                     self.real = sample_batched['image']
                     self.attr_real = sample_batched['attr']
+                    self.mask = sample_batched['mask']
 
-                    self.real_mask = sample_batched['real_mask']
-                    self.obs_mask = sample_batched['obs_mask']
-                    fake_gender = sample_batched['fake_gender']
+                    self.obs = sample_batched['image']
+                    self.attr_obs = sample_batched['attr_obs']
 
-                    self.source_domain = sample_batched['gender']
-                    self.target_domain = sample_batched['fake_gender']
-
-                    self.attr_obs = self.generate_attr_obs(self.attr_real,
-                                                           fake_gender)
-
-                    if self.mode == Mode.inpainting:
-                        self.obs = sample_batched['masked_image']
-                    else:
-                        self.obs = sample_batched['image']
+                    self.source_domain = sample_batched['source_domain']
+                    self.target_domain = sample_batched['target_domain']
 
                     cur_nimg = self.train_step(batch_size,
                                                cur_it,
@@ -309,7 +302,7 @@ class FaceGenStarGAN():
                                batch_size,
                                self.real,
                                self.syn,
-                               self.obs_mask,
+                               self.mask,
                                self.G,
                                self.D,
                                self.optim_G,
@@ -337,10 +330,7 @@ class FaceGenStarGAN():
             detach: flag whether to detach graph from generator or not
 
         """
-        if self.use_mask:
-            self.syn = self.G(self.obs, self.obs_mask, self.attr_obs)
-        else:
-            self.syn = self.G(self.obs, self.attr_obs)
+        self.syn = self.G(self.obs, self.attr_obs, self.mask)
 
         self.cls_real, self.d_attr_real, self.pixel_cls_real = \
             self.D(self.real)
@@ -354,8 +344,7 @@ class FaceGenStarGAN():
                               self.obs,
                               self.attr_real,
                               self.attr_obs,
-                              self.real_mask,
-                              self.obs_mask,
+                              self.mask,
                               self.target_domain,
                               self.syn,
                               self.cls_real,
@@ -381,8 +370,7 @@ class FaceGenStarGAN():
                               self.obs,
                               self.attr_real,
                               self.attr_obs,
-                              self.real_mask,
-                              self.obs_mask,
+                              self.mask,
                               self.source_domain,
                               self.syn,
                               self.cls_real,
@@ -397,8 +385,7 @@ class FaceGenStarGAN():
         """Set input type to cuda or cpu according to gpu availability."""
         self.real = util.tofloat(self.use_cuda, self.real)
         self.attr_real = util.tofloat(self.use_cuda, self.attr_real)
-        self.real_mask = util.tofloat(self.use_cuda, self.real_mask)
-        self.obs_mask = util.tofloat(self.use_cuda, self.obs_mask)
+        self.mask = util.tofloat(self.use_cuda, self.mask)
         self.obs = util.tofloat(self.use_cuda, self.obs)
         self.attr_obs = util.tofloat(self.use_cuda, self.attr_obs)
         self.source_domain = util.tofloat(self.use_cuda, self.source_domain)
@@ -429,7 +416,8 @@ class FaceGenStarGAN():
         """
         crop_size = resol
         image_size = resol
-        transform_options = transforms.Compose([dt.PolygonMask(),
+        transform_options = transforms.Compose([dt.PolygonMask(
+                                                    self.attribute_size),
                                                 dt.RandomHorizontalFlip(),
                                                 dt.CenterCrop(crop_size),
                                                 dt.Resize(image_size),

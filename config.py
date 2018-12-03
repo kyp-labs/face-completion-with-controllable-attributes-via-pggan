@@ -87,6 +87,11 @@ class Config():
             self.train.forced_stop = False
         self.train.forced_stop_resolution = 4  # {inpainting , generation} mode
 
+        self.augment = EasyDict()
+        self.augment.train = True
+        self.augment.iter = 10000
+        self.augment.mask_type_list = ['face', 'eye', 'nose', 'lip']
+        
         # Training Scheduler
         self.sched = EasyDict()
         self.sched.batch_base = 32  # Maximum batch size
@@ -114,6 +119,7 @@ class Config():
         # Loss
         self.loss = EasyDict()
         self.loss.use_feat_loss = False
+        self.loss.use_bdy_loss = False
 
         # type of gan {ga, lsgan, wgan gp, sngan}
         self.loss.gan = Gan.sngan

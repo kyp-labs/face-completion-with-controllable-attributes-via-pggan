@@ -188,20 +188,15 @@ class FaceGenLoss():
 
         return attr_loss
 
-    def calc_recon_loss(self, real, real_mask, syn, obs_mask):
+    def calc_recon_loss(self, real, syn, mask):
         """Calculate reconstruction loss.
 
         Args:
             real (tensor) : real images
-            real_mask (tensor) : domain masks of real images
             syn (tensor) : synthesized images
-            obs_mask (tensor) : domain masks of observed images
+            mask (tensor) : binary masks of observed images (mask area=1)
         """
         N, C, H, W = real.shape
-
-        # target area of domain mask
-        mask = 1 - util.tofloat(self.use_cuda, real_mask == obs_mask)
-        # mask *= obs_mask
         mask = mask.repeat((1, C, 1, 1))
 
         # L1 norm
@@ -211,21 +206,18 @@ class FaceGenLoss():
         recon_loss = torch.mean(recon_loss)
         return recon_loss
 
-    def calc_bdy_loss(self, real, real_mask, syn, obs_mask):
+    def calc_bdy_loss(self, real, syn, mask):
         """Calculate boundary loss.
 
         Args:
             real (tensor) : real images
-            real_mask (tensor) : domain masks of real images
             syn (tensor) : synthesized images
-            obs_mask (tensor) : domain masks of observed images
+            mask (tensor) : binary masks of observed images (mask area=1)
         """
+        if self.config.loss.use_bdy_loss is False: return 0
+        
         # blurring mask boundary
-        N, C, H, W = obs_mask.shape
-
-        # target area of domain mask
-        mask = 1 - util.tofloat(self.use_cuda, real_mask == obs_mask)
-        # mask *= obs_mask
+        N, C, H, W = real.shape
         mask = mask.repeat((1, C, 1, 1))
 
         mean_filter = MeanFilter(mask.shape, self.config.loss.mean_filter_size)
@@ -233,29 +225,27 @@ class FaceGenLoss():
             mean_filter.cuda()
 
         w = mean_filter(mask)
-        w = w * mask  # weights of mask range are 0
-        w_ext = w.repeat((1, C, 1, 1))
+        w_ext = w * mask  # weights of mask range are 0
+        # w_ext = w.repeat((1, C, 1, 1))
 
         w_ext = util.tofloat(self.use_cuda, w_ext)
 
         bdy_loss = torch.mean(w_ext * torch.abs(real - syn))
-        # bdy_loss = bdy_loss.sum()/N
         return bdy_loss
 
-    def calc_cycle_loss(self, G, cur_level, real, syn, real_mask, attr_real):
+    def calc_cycle_loss(self, G, cur_level, real, syn, mask, attr_real):
         """Calculate cycle consistency loss.
 
         Args:
             G: generator
             cur_level: progress indicator of progressive growing network
             real (tensor) : real images
-            real_mask (tensor) : domain masks of real images
-            obs_mask (tensor) : domain masks of observed images
+            mask (tensor) : binary masks of observed images (mask area=1)
 
         """
         N, C, H, W = real.shape
 
-        pred_real = G(syn, real_mask, attr_real)
+        pred_real = G(syn, attr_real, mask)
 
         # L1 norm
         cycle_loss = torch.mean(torch.abs(real - pred_real))
@@ -263,7 +253,7 @@ class FaceGenLoss():
 
     def calc_pixel_loss(self,
                         predict,
-                        target,
+                        mask,
                         target_domain,
                         weight=None,
                         size_average=False):
@@ -283,26 +273,22 @@ class FaceGenLoss():
         Return:
             loss (scalar) : cross entropy loss
         """
-        N, C, H, W = target.shape
+        N, C, H, W = predict.shape
 
         # target area of domain mask
-        target_domain = target_domain.reshape(N, 1, 1, 1).repeat((1, C, H, W))
-        loss_mask = util.tofloat(self.use_cuda, target == target_domain)
-
-        target_area_size = (loss_mask.view(N, -1) == 1).sum()
-        # target_area_size = (loss_mask.view(N, -1) == 1).sum(dim=1)
-        target_area_size = util.tofloat(self.use_cuda, target_area_size)
-
-        masked_predict = util.tofloat(self.use_cuda, predict * loss_mask)
-        masked_target = util.tofloat(self.use_cuda, target * loss_mask)
+        target = target_domain.reshape(N, 1, 1, 1).repeat((1, C, H, W))
+        masked_predict = util.tofloat(self.use_cuda, predict * mask)
+        masked_target = util.tofloat(self.use_cuda, target * mask)
 
         pixel_loss = self.cross_entropy2d(masked_predict,
                                           masked_target,
                                           weight,
                                           size_average)
-        # print(pixel_loss)
+
+        target_area_size = (mask.view(N, -1) == 1).sum()
+        target_area_size = util.tofloat(self.use_cuda, target_area_size)
+
         pixel_loss = pixel_loss.sum() // target_area_size
-        # print(target_area_size)
         return pixel_loss
 
     def cross_entropy2d(self,
@@ -345,8 +331,7 @@ class FaceGenLoss():
                     obs,
                     attr_real,
                     attr_obs,
-                    real_mask,
-                    obs_mask,
+                    mask,
                     target_domain,
                     syn,
                     cls_real,
@@ -380,28 +365,26 @@ class FaceGenLoss():
                                                         cur_level,
                                                         real,
                                                         syn,
-                                                        real_mask,
+                                                        mask,
                                                         attr_real)
         self.g_losses.recon_loss = 0
         self.g_losses.bdy_loss = 0
         if use_mask:
             # reconstruction loss
             self.g_losses.recon_loss = self.calc_recon_loss(real,
-                                                            real_mask,
                                                             syn,
-                                                            obs_mask)
+                                                            mask)
             # boundary loss
             self.g_losses.bdy_loss = self.calc_bdy_loss(real,
-                                                        real_mask,
                                                         syn,
-                                                        obs_mask)
+                                                        mask)
         # pixelwise classification loss
         if pixel_cls_syn is None:
             self.g_losses.pixel_loss = 0
         else:
             self.g_losses.pixel_loss = \
                 self.calc_pixel_loss(pixel_cls_syn,
-                                     real_mask,
+                                     mask,
                                      target_domain)
 
         self.g_losses.g_loss = self.g_losses.g_adver_loss + \
@@ -418,8 +401,7 @@ class FaceGenLoss():
                     obs,
                     attr_real,
                     attr_obs,
-                    real_mask,
-                    obs_mask,
+                    mask,
                     source_domain,
                     syn,
                     cls_real,
@@ -471,7 +453,7 @@ class FaceGenLoss():
         else:
             self.d_losses.pixel_loss = \
                 self.calc_pixel_loss(pixel_cls_real,
-                                     real_mask,
+                                     mask,
                                      source_domain)
 
         self.d_losses.d_loss = self.d_losses.d_adver_loss + \
