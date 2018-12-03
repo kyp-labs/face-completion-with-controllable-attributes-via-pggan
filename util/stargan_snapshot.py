@@ -234,8 +234,8 @@ class Snapshot(object):
         # ===generate sample images===
         samples = []
         if (it % sample_freq == 1) or it == total_it:
-            samples = self.image_sampling(minibatch_size)
-            # samples = self.generator.snapshot(cur_resol, G)
+            # samples = self.image_sampling(minibatch_size)
+            samples = self.generator.snapshot(cur_resol, G)
             filename = '%s-%dx%d-%s-%s.png' % (str(global_it).zfill(6),
                                                cur_resol,
                                                cur_resol,

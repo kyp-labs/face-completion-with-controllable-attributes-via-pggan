@@ -101,7 +101,7 @@ class FaceGenStarGAN():
         self.G = StarGenerator(conv_dim=64,
                                c_dim=self.config.dataset.attibute_size,
                                repeat_num=6,
-                               use_mask=self.use_mask)
+                               use_mask=False)
         self.D = StarDiscriminator(image_size=image_size,
                                    conv_dim=64,
                                    c_dim=self.config.dataset.attibute_size,

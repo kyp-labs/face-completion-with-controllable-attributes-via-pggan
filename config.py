@@ -281,7 +281,9 @@ class StarGANConfig(Config):
         self.train.net.max_resolution = 128
         self.train.use_mask = True
         self.train.use_attr = True
-        
+                # weight for target area of reconstruction loss (0.7)
+        self.loss.alpha_recon = 0.0
+
         # weight of reconstruction loss (paper = 500)
         self.loss.lambda_recon = 200.0
         # weight of feature loss (paper = 10)
@@ -302,13 +304,13 @@ class StarGANConfig(Config):
                                  128: 16,
                                  256: 8}
 
-        self.snapshot.sample_freq_dict = {4: 256,
-                                          8: 512,
-                                          16: 512,
-                                          32: 512,
-                                          64: 512,
-                                          128: 512,
-                                          256: 512}
+        self.snapshot.sample_freq_dict = {4: 250,
+                                          8: 500,
+                                          16: 500,
+                                          32: 500,
+                                          64: 500,
+                                          128: 500,
+                                          256: 500}
 
         self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
 
