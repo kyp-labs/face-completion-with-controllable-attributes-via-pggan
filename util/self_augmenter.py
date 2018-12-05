@@ -79,8 +79,7 @@ class SelfAugmenter(object):
                 syn,
                 attr_real,
                 attr_obs,
-                real_mask,
-                obs_mask,
+                mask,
                 mask_type,
                 source_domain, 
                 target_domain):
@@ -89,7 +88,7 @@ class SelfAugmenter(object):
         Args:
             real : real images
             obs: observed images
-            obs_mask : observed data mask
+            mask : observed data mask
             attr_obs : attributes of observed images
             source_domain (tensor) : [batch_size, 1]
                                      source domain id
@@ -97,48 +96,49 @@ class SelfAugmenter(object):
                                      target domain id
         """
         # binary mask
-        N, C, H, W = obs_mask.shape
-        target_bits = \
-            target_domain.reshape(N, 1, 1, 1).repeat((1, C, H, W))
-        obs_mask = util.tofloat(self.use_cuda, obs_mask)
-        target_bits = util.tofloat(self.use_cuda, target_bits)
-        target_mask = util.tofloat(self.use_cuda, obs_mask == target_bits)
+        N, C, H, W = mask.shape
+        mask = util.tofloat(self.use_cuda, mask)
+        mask = mask.repeat((1, C, 1, 1))
         
         ## augmented domain
         augmented_domain, augmented_domain_onehot = \
             self.get_augmented_domain(source_domain, target_domain, mask_type)
-            
-        augmented_target_bits = \
-            augmented_domain.reshape(N, 1, 1, 1).repeat((1, C, H, W))
-        
-        # obs mask
-        context_mask = 1 - target_mask
-        obs_mask = obs_mask * context_mask + \
-            augmented_target_bits * target_mask
-        
-        # obs attribute
-        attr_obs = augmented_domain_onehot
+        augmented_domain = util.tofloat(self.use_cuda, augmented_domain)          
+        augmented_domain_onehot = util.tofloat(self.use_cuda,
+                                               augmented_domain_onehot) 
+        # if source domain is same with target domain, 
+        #                               don't augment real images.
+        aug_idx = np.arange(1, N+1) * (source_domain != target_domain) - 1
 
         # real image
-        N, C, H, W = syn.shape
-        target_mask = target_mask.repeat((1, C, 1, 1))
-        context_mask = 1 - target_mask
-        
-        # if source domain and target domain is same, no augmentation
-        real = obs * context_mask + syn * target_mask
-        
-        batch_index = np.arange(1, N+1) * (source_domain == target_domain) - 1
-        real[batch_index] = obs[batch_index]
-        
-        # real mask
-        real_mask = augmented_target_bits
+        # obs, syn = self.normalize(obs, syn)
+        real[aug_idx] = (syn * mask + obs * (1 - mask))[aug_idx]
+
+        # obs attribute
+
+        attr_obs[aug_idx] = augmented_domain_onehot[aug_idx]
         
         # real attribute
-        attr_real = augmented_domain_onehot
-        
+        attr_real[aug_idx] = augmented_domain_onehot[aug_idx]
+
         # target domain
-        target_domain = augmented_domain
+        target_domain[aug_idx] = augmented_domain[aug_idx]
+
+        return real, attr_real, attr_obs, target_domain
  
+    def normalize(self, obs, syn):        
+        N, C, H, W = obs.shape
+        obs_syn = torch.cat((obs, syn), 1)
+        for i in range(N):
+            obs_syn_min = torch.min(obs_syn[i])
+            obs_syn_max = torch.max(obs_syn[i])
+            obs[i] -= obs_syn_min
+            obs[i] /= obs_syn_max
+            syn[i] -= obs_syn_min
+            syn[i] /= obs_syn_max
+
+        return obs, syn
+    
     def get_augmented_domain(self,
                              source_domain,
                              target_domain,

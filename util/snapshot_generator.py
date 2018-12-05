@@ -79,11 +79,11 @@ class SnapshotGenerator(object):
                                                     self.mask_type_list),
                                                 dt2.ToTensor2(),
                                                 dt2.Normalize(
-                                                    mean=(0.5,0.5,0.5),
-                                                    std=(0.5,0.5,0.5)),
+                                                    mean=(0.5, 0.5, 0.5),
+                                                    std=(0.5, 0.5, 0.5)),
                                                 dt.Normalize(
-                                                    mean=(0.5,0.5,0.5),
-                                                    std=(0.5,0.5,0.5))])
+                                                    mean=(0.5, 0.5, 0.5),
+                                                    std=(0.5, 0.5, 0.5))])
 
         dataset_func = self.config.dataset.func
         ds = self.config.dataset
@@ -101,19 +101,21 @@ class SnapshotGenerator(object):
         self.sample_set = DataLoader(datasets, batch_size)
         return True
     
+    def preprocess(self):
+        """Set input type to cuda or cpu according to gpu availability."""
+        self.real = util.tofloat(self.use_cuda, self.real)
+        self.attr_real = util.tofloat(self.use_cuda, self.attr_real)
+        self.mask = util.tofloat(self.use_cuda, self.mask)
+        self.obs = util.tofloat(self.use_cuda, self.obs)
+        self.attr_obs = util.tofloat(self.use_cuda, self.attr_obs)
+ 
     def snapshot(self,
                  cur_resol,
                  G):
         """Snapshot.
 
         Args:
-            global_it : global # of iterations through training
-            it: current # of iterations in the phases of the layer
-            total_it: total # of iterations in the phases of the layer
-            phase: training, transition, replaying
             cur_resol: image resolution of current layer
-            cur_level: progress indicator of progressive growing network
-            batch_size: minibatch size
             G: generator
 
         """
@@ -127,9 +129,8 @@ class SnapshotGenerator(object):
             # get a next batch - temporary code
             self.real = sample_batched['image']
             self.attr_real = sample_batched['attr']
-            # self.obs_attr_list = self.permute_attr(self.attr_real)
             
-            self.obs_mask_list = sample_batched['obs_mask_list']
+            self.mask_list = sample_batched['mask_list']
             self.masked_real_list = sample_batched['masked_real_list']
             
             self.obs = sample_batched['image']
@@ -137,29 +138,24 @@ class SnapshotGenerator(object):
             self.target_domain_list = sample_batched['target_domain_list']
 
             batch = []
-            # mask_num = len(self.masked_real_list)
             num_target_domain = len(self.target_domain_list)
             batch_index = np.arange(self.batch_size)
-            
 
             N, C, H, W = self.obs.shape
             
             for target_idx in range(num_target_domain):
                 target_domain = self.target_domain_list[target_idx]
                 # mask_type = self.domain_lookup[target_domain, 2]
-                self.obs_mask = self.obs_mask_list[target_idx]
+                self.mask = self.mask_list[target_idx]
                 
                 self.attr_obs = torch.zeros_like(self.attr_real)
                 self.attr_obs[batch_index, target_domain.data.numpy()] = 1
                 
                 self.preprocess()
                
-                if self.use_mask:
-                    self.syn = G(self.obs, self.obs_mask, self.attr_obs)
-                else:
-                    self.syn = G(self.obs, self.attr_obs)
-                
-                batch.append(self.masked_real_list[target_idx].cpu().data.numpy())
+                self.syn = G(self.obs, self.attr_obs, self.mask)
+                masked = self.masked_real_list[target_idx].cpu().data.numpy()
+                batch.append(masked)
                 batch.append(self.syn.cpu().data.numpy()) # real
 
             batch = np.concatenate(batch, axis=3)
@@ -185,13 +181,7 @@ class SnapshotGenerator(object):
         """Snapshot.
 
         Args:
-            global_it : global # of iterations through training
-            it: current # of iterations in the phases of the layer
-            total_it: total # of iterations in the phases of the layer
-            phase: training, transition, replaying
             cur_resol: image resolution of current layer
-            cur_level: progress indicator of progressive growing network
-            batch_size: minibatch size
             G: generator
 
         """
@@ -207,7 +197,7 @@ class SnapshotGenerator(object):
             self.attr_real = sample_batched['attr']
             # self.obs_attr_list = self.permute_attr(self.attr_real)
             
-            self.obs_mask_list = sample_batched['obs_mask_list']
+            self.mask_list = sample_batched['mask_list']
             self.masked_real_list = sample_batched['masked_real_list']
             
             self.obs = sample_batched['image']
@@ -219,14 +209,14 @@ class SnapshotGenerator(object):
             num_target_domain = len(self.target_domain_list)
             batch_index = np.arange(self.batch_size)
             for mask_type in range(1):
-                batch.append(self.masked_real_list[mask_type].cpu().data.numpy())
+                masked = self.masked_real_list[mask_type].cpu().data.numpy()
+                batch.append(masked)
     
                 N, C, H, W = self.obs.shape
                 
                 for target_idx in range(num_target_domain):
                     target_domain = self.target_domain_list[target_idx]
-                    # mask_type = self.domain_lookup[target_domain, 2]
-                    self.obs_mask = self.obs_mask_list[mask_type][target_idx]
+                    self.mask = self.mask_list[mask_type][target_idx]
                     
                     self.attr_obs = torch.zeros_like(self.attr_real)
                     self.attr_obs[batch_index, target_domain.data.numpy()] = 1
@@ -234,7 +224,7 @@ class SnapshotGenerator(object):
                     self.preprocess()
                    
                     if self.use_mask:
-                        self.syn = G(self.obs, self.obs_mask, self.attr_obs)
+                        self.syn = G(self.obs, self.mask, self.attr_obs)
                     else:
                         self.syn = G(self.obs, self.attr_obs)
                     
@@ -253,11 +243,3 @@ class SnapshotGenerator(object):
         samples[:, 1:, :] /= np.max(samples[:, 1:, :])
 
         return samples
-    
-    def preprocess(self):
-        """Set input type to cuda or cpu according to gpu availability."""
-        self.real = util.tofloat(self.use_cuda, self.real)
-        self.attr_real = util.tofloat(self.use_cuda, self.attr_real)
-        self.obs_mask = util.tofloat(self.use_cuda, self.obs_mask)
-        self.obs = util.tofloat(self.use_cuda, self.obs)
-        self.attr_obs = util.tofloat(self.use_cuda, self.attr_obs)

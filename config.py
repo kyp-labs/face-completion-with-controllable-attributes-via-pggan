@@ -120,6 +120,7 @@ class Config():
         self.loss = EasyDict()
         self.loss.use_feat_loss = False
         self.loss.use_pixel_loss = False
+        self.loss.use_bdy_loss = False
 
         # type of gan {ga, lsgan, wgan gp, sngan}
         self.loss.gan = Gan.sngan
@@ -177,7 +178,7 @@ class Config():
         self.snapshot.rows_map = {64: 16,
                                   32: 16,
                                   16: 8,
-                                  8: 1,
+                                  8: 4,
                                   4: 1,
                                   2: 1,
                                   1: 1}  # rows per batch size
@@ -280,9 +281,9 @@ class StarGANConfig(Config):
         self.loss.gan = Gan.wgan_gp
 
         self.train.D_repeats = 5
-        self.train.total_size = 6400000
-        self.train.train_size = 3200000
-        self.train.transition_size = 3200000
+        self.train.total_size = 160000
+        self.train.train_size = 80000
+        self.train.transition_size = 80000
 
         self.train.net.min_resolution = 128
         self.train.net.max_resolution = 128
@@ -291,7 +292,7 @@ class StarGANConfig(Config):
         
         # augmented train and domain
         self.augment.train = True
-        self.augment.iter = 5000
+        self.augment.iter = 10000
         self.augment.mask_type_list = ['face', 'eye']
         
         # weight of reconstruction loss (paper = 500)
@@ -323,10 +324,9 @@ class StarGANConfig(Config):
                                           256: 500}
 
         self.checkpoint.save_freq_dict = self.snapshot.sample_freq_dict
-        self.checkpoint.restore_dir = './exp/2018-11-26 182818'
+        self.checkpoint.restore_dir = './exp/2018-12-04 090923'
         self.checkpoint.which_file = \
-             '005000-128x128-Phase.training-005001.pth'
-
+             '009999-128x128-Phase.training-009999.pth'
 
 class ProductionConfig(Config):
     """Production Configuration Class."""

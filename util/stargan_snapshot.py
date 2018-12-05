@@ -55,6 +55,8 @@ class Snapshot(object):
         self.generator = SnapshotGenerator(self.config,
                                            self.use_cuda,
                                            self.self_augmenter)
+        self.mask_type_list = self.config.augment.mask_type_list
+
 
     def restore_model(self, G, D, optim_G, optim_D):
         """Restore model from checkpoint.
@@ -93,6 +95,7 @@ class Snapshot(object):
         self.selfaugment_dir = os.path.join(restore_dir, 'selfaugment')
         self.ckpt_dir = os.path.join(restore_dir, 'ckpts')
         assert os.path.exists(self.sample_dir) \
+            and os.path.exists(self.selfaugment_dir) \
             and os.path.exists(self.ckpt_dir)
 
         filename = os.path.join(self.ckpt_dir, which_file)
@@ -135,6 +138,7 @@ class Snapshot(object):
         self.ckpt_dir = os.path.join(self.exp_dir, self.current_time, 'ckpts')
 
         os.makedirs(self.sample_dir)
+        os.makedirs(self.selfaugment_dir)
         os.makedirs(self.ckpt_dir)
 
     def prepare_logging(self):
@@ -156,7 +160,7 @@ class Snapshot(object):
                  batch_size,
                  obs,
                  syn,
-                 obs_mask,
+                 mask,
                  G,
                  D,
                  optim_G,
@@ -175,7 +179,7 @@ class Snapshot(object):
             batch_size: minibatch size
             obs: observed images
             syn: synthesized images
-            obs_mask : observed image mask
+            mask : observed image mask
             G: generator
             D: discriminator
             optim_G: optimizer of generator
@@ -188,7 +192,7 @@ class Snapshot(object):
         self.d_losses = d_losses
         self.obs = obs
         self.syn = syn
-        self.obs_mask = obs_mask
+        self.mask = mask
 
         # ===report ===
         self.line_summary(global_it, it, total_it, phase, cur_resol, cur_level)
@@ -324,34 +328,27 @@ class Snapshot(object):
         n_col = int(np.ceil(batch_size / float(n_row)))
         
         N, C, H, W = self.obs.shape
-        mask = self.obs_mask.repeat((1, C, 1, 1))
+        mask = self.mask.repeat((1, C, 1, 1))
         
         # sample_idx = np.random.randint(batch_size, size=n_row*n_col)
         samples = []
-        i = j = k = 0
+        i = 0
         for _ in range(n_row):
             one_row = []
             for _ in range(n_col):
-                one_row.append(mask[k].cpu().data.numpy()) # mask
+                one_row.append(mask[i].cpu().data.numpy()) # mask
                 one_row.append(self.obs[i].cpu().data.numpy()) # real
-                one_row.append(self.syn[j].cpu().data.numpy()) # syn
+                one_row.append(self.syn[i].cpu().data.numpy()) # syn
                 i += 1
-                j += 1
-                k += 1
                 
             samples += [np.concatenate(one_row, axis=2)]
             
         samples = np.concatenate(samples, axis=1).transpose([1, 2, 0])
 
-        half = samples.shape[1] // 2
-        samples[:, :half, :] = \
-            samples[:, :half, :] - np.min(samples[:, :half, :])
-        samples[:, :half, :] = \
-            samples[:, :half, :] / np.max(samples[:, :half, :])
-        samples[:, half:, :] = \
-            samples[:, half:, :] - np.min(samples[:, half:, :])
-        samples[:, half:, :] = \
-            samples[:, half:, :] / np.max(samples[:, half:, :])
+        for idx in range(n_col*3):
+            samples[:, idx, :] -= np.min(samples[:, idx, :])
+            if np.max(samples[:, idx, :]) != 0:
+                samples[:, idx, :] /= np.max(samples[:, idx, :])
 
         return samples
 
@@ -365,7 +362,8 @@ class Snapshot(object):
                                  obs,
                                  syn,
                                  real,
-                                 obs_mask):
+                                 mask,
+                                 mask_type):
         """Snapshot.
 
         Args:
@@ -378,13 +376,13 @@ class Snapshot(object):
             obs: observed images
             syn: synthesized images
             real : real images
-            obs_mask : observed image mask
+            mask : observed image mask
 
         """
         self.obs = obs
         self.syn = syn
         self.real = real
-        self.obs_mask = obs_mask
+        self.mask = mask
         
         sample_freq_dict = self.config.snapshot.sample_freq_dict
         sample_freq = sample_freq_dict.get(cur_resol,
@@ -393,12 +391,13 @@ class Snapshot(object):
         samples = []
         if (it % sample_freq == 1) or it == total_it:
             samples = self.selfaugment_sampling(batch_size)
-            filename = '%s-%dx%d-%s-%s.png' % (str(global_it).zfill(6),
+            filename = '%s-%dx%d-%s-%s-%s.png' % (str(global_it).zfill(6),
                                                cur_resol,
                                                cur_resol,
                                                str(it).zfill(6),
-                                               phase)
-            imsave(os.path.join(self.self.selfaugment_dir, filename), samples)
+                                               phase,
+                                               self.mask_type_list[mask_type])
+            imsave(os.path.join(self.selfaugment_dir, filename), samples)
 
     def selfaugment_sampling(self, batch_size):
         """Image_sampling.
@@ -413,29 +412,28 @@ class Snapshot(object):
         n_col = int(np.ceil(batch_size / float(n_row)))
         
         N, C, H, W = self.obs.shape
-        mask = self.obs_mask.repeat((1, C, 1, 1))
+        mask = self.mask.repeat((1, C, 1, 1))
         
         # sample_idx = np.random.randint(batch_size, size=n_row*n_col)
         samples = []
-        i = j = k = 0
+        i = 0
         for _ in range(n_row):
             one_row = []
             for _ in range(n_col):
-                one_row.append(mask[k].cpu().data.numpy()) # mask
-                one_row.append(self.obs[i].cpu().data.numpy()) # real
-                one_row.append(self.syn[j].cpu().data.numpy()) # syn
-                one_row.append(self.real[j].cpu().data.numpy()) # syn
+                one_row.append(mask[i].cpu().data.numpy()) # mask
+                one_row.append(self.obs[i].cpu().data.numpy()) # obs
+                one_row.append(self.syn[i].cpu().data.numpy()) # syn
+                one_row.append(self.real[i].cpu().data.numpy()) # aug real
                 i += 1
-                j += 1
-                k += 1
                 
             samples += [np.concatenate(one_row, axis=2)]
             
         samples = np.concatenate(samples, axis=1).transpose([1, 2, 0])
 
-        for type_idx in range(4):
-            samples[:, type_idx, :] -= np.min(samples[:, type_idx, :])
-            samples[:, type_idx, :] /= np.max(samples[:, type_idx, :])
+        for idx in range(n_col*4):
+            samples[:, idx, :] -= np.min(samples[:, idx, :])
+            if np.max(samples[:, idx, :]) != 0:
+                samples[:, idx, :] /= np.max(samples[:, idx, :])
             
         return samples
     
