@@ -59,10 +59,22 @@ class RandomHorizontalFlip(object):
 
     def flip_landmark(self, landmark):
         new_landmark = landmark.copy()
+        
         for key in self.landmark_idx:
             idx = self.landmark_idx[key][0]
             new_landmark[idx] = self.IMAGE_WIDTH  - landmark[idx]
-            
+         
+        X= 0
+        temp = new_landmark[self.landmark_idx["left_eye"][X]]
+        new_landmark[self.landmark_idx["left_eye"][X]] = \
+                new_landmark[self.landmark_idx["right_eye"][X]]
+        new_landmark[self.landmark_idx["right_eye"][X]] = temp
+
+        temp = new_landmark[self.landmark_idx["left_lip"][X]]
+        new_landmark[self.landmark_idx["left_lip"][X]] = \
+                new_landmark[self.landmark_idx["right_lip"][X]]
+        new_landmark[self.landmark_idx["right_lip"][X]] = temp
+        
         return new_landmark
     
     def __repr__(self):
